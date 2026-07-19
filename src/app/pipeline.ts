@@ -17,7 +17,7 @@ export interface PipelineOutput {
 
 let generation = 0;
 
-/** source → diagnostics + laid-out diagram. Stale async layouts are dropped. */
+/** source -> diagnostics + laid-out diagram. Stale async layouts are dropped. */
 export async function runPipeline(source: string): Promise<PipelineOutput | 'stale'> {
   const gen = ++generation;
   const { module: mod, diagnostics } = parse(source);

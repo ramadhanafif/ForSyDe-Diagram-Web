@@ -67,7 +67,7 @@ export function isDelay(p: IRProcess): p is IRDelay {
  * Strip spans/rates and produce the exact JSON shape emitted by
  * forsyde-compiler-exe --output-forsyde-ir-json, for fixture parity tests.
  * The `functions` array is intentionally omitted: the reference compiler
- * injects GHC-generated `fail` bindings there, and the actor→function
+ * injects GHC-generated `fail` bindings there, and the actor->function
  * mapping is already covered by `processes`.
  */
 export function irToParityJson(ir: IRSystem): unknown {
