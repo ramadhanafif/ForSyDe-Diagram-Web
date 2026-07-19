@@ -1,0 +1,61 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "add"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in_1",
+            "s_in_2"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "add",
+                "name": "a_a",
+                "type": "Actor21"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in_2",
+                "source": {
+                    "name": "s_in_2",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_in_1",
+                "source": {
+                    "name": "s_in_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

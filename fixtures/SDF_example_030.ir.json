@@ -1,0 +1,106 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "add"
+            },
+            {
+                "name": "accumulate"
+            }
+        ],
+        "inputs": [
+            "s_in_x",
+            "s_in_y"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "add",
+                "name": "a_a",
+                "type": "Actor21"
+            },
+            {
+                "function": "accumulate",
+                "name": "a_b",
+                "type": "Actor22"
+            },
+            {
+                "name": "d_1",
+                "tokens": [
+                    0
+                ],
+                "type": "Delay"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in_y",
+                "source": {
+                    "name": "s_in_y",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in_x",
+                "source": {
+                    "name": "s_in_x",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_2",
+                "source": {
+                    "name": "a_b",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "d_1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_2_delayed",
+                "source": {
+                    "name": "d_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_b",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_1",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_b",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_b",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

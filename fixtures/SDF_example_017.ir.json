@@ -1,0 +1,83 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "divide"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "multiply"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in_1",
+            "s_in_2"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "divide",
+                "name": "a_b",
+                "type": "Actor11"
+            },
+            {
+                "function": "multiply",
+                "name": "a_a",
+                "type": "Actor21"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in_2",
+                "source": {
+                    "name": "s_in_2",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in_1",
+                "source": {
+                    "name": "s_in_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_1",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_b",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_b",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

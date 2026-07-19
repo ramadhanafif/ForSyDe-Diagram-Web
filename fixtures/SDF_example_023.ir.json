@@ -1,0 +1,52 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "main"
+            },
+            {
+                "name": "f_base64"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "f_base64",
+                "name": "actor_base64",
+                "type": "Actor11"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in",
+                "source": {
+                    "name": "s_in",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "actor_base64",
+                    "rate": 3
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "actor_base64",
+                    "rate": 4
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

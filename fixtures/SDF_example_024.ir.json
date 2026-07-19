@@ -1,0 +1,176 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "f_base64"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_base64_partial_3"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_base64_partial_2"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_3split"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in"
+        ],
+        "outputs": [
+            "s_full",
+            "s_partial3",
+            "s_partial2"
+        ],
+        "processes": [
+            {
+                "function": "f_base64",
+                "name": "actor_base64",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_base64_partial_3",
+                "name": "actor_base64_partial_3",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_base64_partial_2",
+                "name": "actor_base64_partial_2",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_3split",
+                "name": "actor_3split",
+                "type": "Actor13"
+            },
+            {
+                "name": "delay_partial_2",
+                "tokens": [
+                    0,
+                    0
+                ],
+                "type": "Delay"
+            },
+            {
+                "name": "delay_partial_3",
+                "tokens": [
+                    0
+                ],
+                "type": "Delay"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in",
+                "source": {
+                    "name": "s_in",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "actor_3split",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in2",
+                "source": {
+                    "name": "actor_3split",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "delay_partial_3",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_pre_partial3_delayed",
+                "source": {
+                    "name": "delay_partial_3",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "actor_base64_partial_3",
+                    "rate": 3
+                }
+            },
+            {
+                "name": "s_in3",
+                "source": {
+                    "name": "actor_3split",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "delay_partial_2",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_pre_partial2_delayed",
+                "source": {
+                    "name": "delay_partial_2",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "actor_base64_partial_2",
+                    "rate": 3
+                }
+            },
+            {
+                "name": "s_in1",
+                "source": {
+                    "name": "actor_3split",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "actor_base64",
+                    "rate": 3
+                }
+            },
+            {
+                "name": "s_full",
+                "source": {
+                    "name": "actor_base64",
+                    "rate": 4
+                },
+                "target": {
+                    "name": "s_full",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_partial3",
+                "source": {
+                    "name": "actor_base64_partial_3",
+                    "rate": 4
+                },
+                "target": {
+                    "name": "s_partial3",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_partial2",
+                "source": {
+                    "name": "actor_base64_partial_2",
+                    "rate": 4
+                },
+                "target": {
+                    "name": "s_partial2",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

@@ -1,0 +1,155 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "f_2"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_3"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_4"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_1"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "f_2",
+                "name": "a_2",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_3",
+                "name": "a_3",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_4",
+                "name": "a_4",
+                "type": "Actor22"
+            },
+            {
+                "function": "f_1",
+                "name": "a_1",
+                "type": "Actor22"
+            },
+            {
+                "name": "d_1",
+                "tokens": [
+                    0
+                ],
+                "type": "Delay"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_1",
+                "source": {
+                    "name": "a_1",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_2",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_2",
+                "source": {
+                    "name": "a_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_3",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_4",
+                "source": {
+                    "name": "a_3",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_4",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_3",
+                "source": {
+                    "name": "a_2",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_4",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_5",
+                "source": {
+                    "name": "a_4",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "d_1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_5_delayed",
+                "source": {
+                    "name": "d_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in",
+                "source": {
+                    "name": "s_in",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_1",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_4",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

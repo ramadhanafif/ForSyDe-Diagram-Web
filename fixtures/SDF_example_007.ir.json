@@ -1,0 +1,171 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "f_1"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_2"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_3"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_4"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in_a",
+            "s_in_b"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "f_1",
+                "name": "a_a",
+                "type": "Actor12"
+            },
+            {
+                "function": "f_2",
+                "name": "a_b",
+                "type": "Actor13"
+            },
+            {
+                "function": "f_3",
+                "name": "a_c",
+                "type": "Actor32"
+            },
+            {
+                "function": "f_4",
+                "name": "a_d",
+                "type": "Actor41"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in_b",
+                "source": {
+                    "name": "s_in_b",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_b",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in_a",
+                "source": {
+                    "name": "s_in_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_4",
+                "source": {
+                    "name": "a_b",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_c",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_3",
+                "source": {
+                    "name": "a_b",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_c",
+                    "rate": 4
+                }
+            },
+            {
+                "name": "s_2",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_c",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_5",
+                "source": {
+                    "name": "a_b",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_d",
+                    "rate": 4
+                }
+            },
+            {
+                "name": "s_7",
+                "source": {
+                    "name": "a_c",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_d",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_6",
+                "source": {
+                    "name": "a_c",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_d",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_1",
+                "source": {
+                    "name": "a_a",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_d",
+                    "rate": 4
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_d",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

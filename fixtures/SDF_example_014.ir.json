@@ -1,0 +1,52 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "main"
+            },
+            {
+                "name": "add"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "add",
+                "name": "a_a",
+                "type": "Actor11"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in",
+                "source": {
+                    "name": "s_in",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_a",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

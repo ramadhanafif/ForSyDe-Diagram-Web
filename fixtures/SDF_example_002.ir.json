@@ -1,0 +1,156 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "f_1"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_2"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_3"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_4"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in_1",
+            "s_in_2"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "f_1",
+                "name": "a_a",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_2",
+                "name": "a_b",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_3",
+                "name": "a_c",
+                "type": "Actor21"
+            },
+            {
+                "function": "f_4",
+                "name": "a_d",
+                "type": "Actor22"
+            },
+            {
+                "name": "d_1",
+                "tokens": [
+                    0
+                ],
+                "type": "Delay"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in_2",
+                "source": {
+                    "name": "s_in_2",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_b",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in_1",
+                "source": {
+                    "name": "s_in_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_4",
+                "source": {
+                    "name": "a_d",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "d_1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_4_delayed",
+                "source": {
+                    "name": "d_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_c",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_1",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_c",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_3",
+                "source": {
+                    "name": "a_c",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_d",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_2",
+                "source": {
+                    "name": "a_b",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "a_d",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_d",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

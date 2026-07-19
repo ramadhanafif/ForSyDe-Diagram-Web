@@ -1,0 +1,116 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "f"
+            },
+            {
+                "name": "fail"
+            },
+            {
+                "name": "f_split"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "f",
+                "name": "a_a",
+                "type": "Actor22"
+            },
+            {
+                "function": "f_split",
+                "name": "a_split",
+                "type": "Actor12"
+            },
+            {
+                "name": "d_2",
+                "tokens": [
+                    1
+                ],
+                "type": "Delay"
+            },
+            {
+                "name": "d_1",
+                "tokens": [
+                    0
+                ],
+                "type": "Delay"
+            }
+        ],
+        "signals": [
+            {
+                "name": "first",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "d_1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "first_delayed",
+                "source": {
+                    "name": "d_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_split",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "second",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "d_2",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "second_delayed",
+                "source": {
+                    "name": "d_2",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "first_delayed1",
+                "source": {
+                    "name": "a_split",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_split",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

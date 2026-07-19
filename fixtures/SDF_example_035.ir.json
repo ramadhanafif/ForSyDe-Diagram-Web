@@ -1,0 +1,66 @@
+{
+    "system": {
+        "functions": [],
+        "inputs": [
+            "s_in_y",
+            "s_in_x"
+        ],
+        "outputs": [
+            "s_out_y",
+            "s_out_x"
+        ],
+        "processes": [
+            {
+                "function": "NULL",
+                "name": "a_a",
+                "type": "Actor22"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_out_y",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out_y",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_out_x",
+                "source": {
+                    "name": "a_a",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out_x",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in_x",
+                "source": {
+                    "name": "s_in_x",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in_y",
+                "source": {
+                    "name": "s_in_y",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_a",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

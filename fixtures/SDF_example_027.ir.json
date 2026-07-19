@@ -1,0 +1,169 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "main"
+            },
+            {
+                "name": "s_in"
+            },
+            {
+                "name": "f_5"
+            },
+            {
+                "name": "f_4"
+            },
+            {
+                "name": "f_3"
+            },
+            {
+                "name": "f_2"
+            },
+            {
+                "name": "f_1"
+            }
+        ],
+        "inputs": [
+            "s_in"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "f_5",
+                "name": "p_5",
+                "type": "Actor11"
+            },
+            {
+                "function": "f_4",
+                "name": "p_4",
+                "type": "Actor12"
+            },
+            {
+                "function": "f_3",
+                "name": "p_3",
+                "type": "Actor21"
+            },
+            {
+                "function": "f_2",
+                "name": "p_2",
+                "type": "Actor12"
+            },
+            {
+                "function": "f_1",
+                "name": "p_1",
+                "type": "Actor21"
+            },
+            {
+                "name": "d_1",
+                "tokens": [
+                    0,
+                    0
+                ],
+                "type": "Delay"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_2",
+                "source": {
+                    "name": "p_2",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "p_4",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_4",
+                "source": {
+                    "name": "p_4",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "p_5",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_5",
+                "source": {
+                    "name": "p_5",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "p_3",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_3",
+                "source": {
+                    "name": "p_2",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "p_3",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_6",
+                "source": {
+                    "name": "p_3",
+                    "rate": 2
+                },
+                "target": {
+                    "name": "d_1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_6_delayed",
+                "source": {
+                    "name": "d_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "p_1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_in",
+                "source": {
+                    "name": "s_in",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "p_1",
+                    "rate": 2
+                }
+            },
+            {
+                "name": "s_1",
+                "source": {
+                    "name": "p_1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "p_2",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "p_4",
+                    "rate": 3
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}

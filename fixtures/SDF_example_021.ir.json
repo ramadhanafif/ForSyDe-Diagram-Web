@@ -1,0 +1,70 @@
+{
+    "system": {
+        "functions": [
+            {
+                "name": "main"
+            },
+            {
+                "name": "f_add"
+            },
+            {
+                "name": "fail"
+            }
+        ],
+        "inputs": [
+            "s_in"
+        ],
+        "outputs": [
+            "s_out"
+        ],
+        "processes": [
+            {
+                "function": "f_add",
+                "name": "a_add",
+                "type": "Actor11"
+            },
+            {
+                "name": "a_delay1",
+                "tokens": [
+                    0
+                ],
+                "type": "Delay"
+            }
+        ],
+        "signals": [
+            {
+                "name": "s_in",
+                "source": {
+                    "name": "s_in",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_add",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_1",
+                "source": {
+                    "name": "a_add",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "a_delay1",
+                    "rate": 1
+                }
+            },
+            {
+                "name": "s_out",
+                "source": {
+                    "name": "a_delay1",
+                    "rate": 1
+                },
+                "target": {
+                    "name": "s_out",
+                    "rate": 1
+                }
+            }
+        ]
+    }
+}
