@@ -308,9 +308,12 @@ function computeIOBufferSizes(
     dir: 'in' | 'out',
     accAliases: [string, string][],
     nTokens: number,
+    visited: Set<string> = new Set(),
   ): { endpoint: string; rate: number; aliases: [string, string][]; nTokens: number } | string => {
     const p = procByName.get(endpoint);
     if (!p) return `Could not find the process '${endpoint}'`;
+    if (visited.has(endpoint)) return `Delay cycle detected at '${endpoint}'`;
+    visited.add(endpoint);
     if (!isDelay(p)) return { endpoint, rate, aliases: accAliases, nTokens };
     const nextSig =
       dir === 'in'
@@ -325,6 +328,7 @@ function computeIOBufferSizes(
       dir,
       [...accAliases, [sigId, sigId], [nextSig.name, sigId]],
       nTokens + p.tokens.length,
+      visited,
     );
   };
 
@@ -386,6 +390,15 @@ export function computeScheduleAndBuffers(ir: IRSystem): ScheduleResult {
     const repInt = toMinimalIntegers(basis[0]!);
     if (repInt.some((v) => v <= 0n)) {
       return err('no-positive-vector', 'No strictly positive repetition vector exists');
+    }
+    // ponytail: hard cap keeps the synchronous scheduler from freezing the tab
+    // on co-prime rate explosions; lift if someone has a real >100k-firing model
+    const totalFirings = repInt.reduce((a, b) => a + b, 0n);
+    if (totalFirings > 100_000n) {
+      return err(
+        'invalid-graph',
+        `Repetition vector too large (${totalFirings} firings per period) — check the rates`,
+      );
     }
     // exact verification: mat * rep == 0
     for (const row of mat) {

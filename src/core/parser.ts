@@ -122,6 +122,17 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
     const inRates = parseRates(c);
     const outRates = parseRates(c);
     const fnTok = c.atIdent() ? c.next()! : null;
+    for (const r of [...(inRates ?? []), ...(outRates ?? [])]) {
+      if (r.value < 1) {
+        diags.push({
+          severity: 'error',
+          code: 'bad-rate',
+          message: `Rates must be positive integers, got ${r.value}`,
+          span: r.span,
+        });
+        return null;
+      }
+    }
     if (!inRates || !outRates || !fnTok) {
       diags.push({
         severity: 'error',
@@ -177,7 +188,12 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
   return null;
 }
 
-function parseSystem(decl: Decl, tokens: Token[], diags: Diagnostic[]): SystemDecl | null {
+function parseSystem(
+  source: string,
+  decl: Decl,
+  tokens: Token[],
+  diags: Diagnostic[],
+): SystemDecl | null {
   const c = new Cursor(tokens);
   c.next(); // 'system'
   const params: Ident[] = [];
@@ -236,7 +252,7 @@ function parseSystem(decl: Decl, tokens: Token[], diags: Diagnostic[]): SystemDe
     whereEnd = groups.length ? groups[groups.length - 1]!.to : decl.end;
 
     for (const g of groups) {
-      const btokens = tokenize(currentSource, g.from, g.to);
+      const btokens = tokenize(source, g.from, g.to);
       const binding = parseBinding(btokens, { from: g.from, to: g.to }, diags);
       if (binding) bindings.push(binding);
     }
@@ -308,10 +324,7 @@ function parseBinding(tokens: Token[], span: Span, diags: Diagnostic[]): WhereBi
   return { lhs, proc: ident(procTok), args, span };
 }
 
-let currentSource = '';
-
 export function parse(source: string): { module: HsModule; diagnostics: Diagnostic[] } {
-  currentSource = source;
   const diags: Diagnostic[] = [];
   const mod: HsModule = {
     moduleName: null,
@@ -338,7 +351,7 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
     if (eqIdx === -1) continue;
 
     if (head.text === 'system') {
-      mod.system = parseSystem(decl, tokens, diags);
+      mod.system = parseSystem(source, decl, tokens, diags);
       continue;
     }
 
