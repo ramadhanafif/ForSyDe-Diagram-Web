@@ -4,7 +4,6 @@ import type {
   HsModule,
   Ident,
   ProcBody,
-  ProcSpec,
   RateLit,
   Span,
   SystemDecl,
