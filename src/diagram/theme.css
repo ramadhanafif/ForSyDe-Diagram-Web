@@ -118,7 +118,7 @@ body {
   color: var(--accent);
 }
 
-/* diagram — mimics the ForSyDe lecture-notes / TikZ figure style:
+/* diagram, mimics the ForSyDe lecture-notes / TikZ figure style:
    serif math typography, lavender single-stroke circles, thin black
    edges with small filled arrowheads, dashed system boundary. */
 svg.diagram {

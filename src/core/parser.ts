@@ -344,7 +344,7 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
       continue;
     }
     if (head.text === 'import') continue;
-    if (tokens[1]?.text === '::') continue; // type signature — opaque
+    if (tokens[1]?.text === '::') continue; // type signature, opaque
 
     // find '=' at top level
     const eqIdx = tokens.findIndex((t) => t.kind === 'punct' && t.text === '=');

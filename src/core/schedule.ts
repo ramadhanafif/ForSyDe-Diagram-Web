@@ -397,7 +397,7 @@ export function computeScheduleAndBuffers(ir: IRSystem): ScheduleResult {
     if (totalFirings > 100_000n) {
       return err(
         'invalid-graph',
-        `Repetition vector too large (${totalFirings} firings per period) — check the rates`,
+        `Repetition vector too large (${totalFirings} firings per period): check the rates`,
       );
     }
     // exact verification: mat * rep == 0

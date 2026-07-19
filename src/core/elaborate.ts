@@ -176,7 +176,7 @@ export function elaborate(mod: HsModule): {
         diags.push({
           severity: 'error',
           code: 'implicit-split',
-          message: `Signal '${arg.name}' is consumed twice; signals cannot be split implicitly — duplicate it with an explicit split actor`,
+          message: `Signal '${arg.name}' is consumed twice; signals cannot be split implicitly: duplicate it with an explicit split actor`,
           span: arg.span,
         });
         return;

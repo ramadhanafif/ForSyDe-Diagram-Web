@@ -48,7 +48,7 @@ export function tokenize(source: string, offset = 0, end = source.length): Token
       continue;
     }
     // negative integer literal (only valid where a literal is expected;
-    // the parser decides — the lexer just glues '-' to digits)
+    // the parser decides, the lexer just glues '-' to digits)
     if (c === '-' && /[0-9]/.test(source[i + 1] ?? '')) {
       const start = i;
       i++;
@@ -57,7 +57,7 @@ export function tokenize(source: string, offset = 0, end = source.length): Token
       continue;
     }
     if ('()[],='.includes(c)) {
-      // '=' might be '==' or '=>' — treat those as op
+      // '=' might be '==' or '=>', treat those as op
       if (c === '=' && (source[i + 1] === '=' || source[i + 1] === '>')) {
         tokens.push({ kind: 'op', text: source.slice(i, i + 2), span: { from: i, to: i + 2 } });
         i += 2;
@@ -72,7 +72,7 @@ export function tokenize(source: string, offset = 0, end = source.length): Token
       i += 2;
       continue;
     }
-    // anything else (operators, backticks, string chars...) — single-char op
+    // anything else (operators, backticks, string chars...), single-char op
     tokens.push({ kind: 'op', text: c, span: { from: i, to: i + 1 } });
     i++;
   }

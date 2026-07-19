@@ -95,7 +95,7 @@ async function update(source: string): Promise<void> {
   } else {
     svg.classList.add('stale');
     statusChip.hidden = false;
-    statusChip.textContent = `Showing last valid diagram — ${errors} error${errors === 1 ? '' : 's'}`;
+    statusChip.textContent = `Showing last valid diagram: ${errors} error${errors === 1 ? '' : 's'}`;
   }
 
   if (result.schedule && !result.schedule.ok) {
