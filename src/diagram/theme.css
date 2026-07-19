@@ -5,10 +5,8 @@
   --fg-dim: #656d76;
   --border: #d1d9e0;
   --accent: #0969da;
-  --node-fill: #ddf4ff;
-  --node-stroke: #54aeff;
-  --delay-fill: #fff8c5;
-  --delay-stroke: #d4a72c;
+  --node-fill: #d9d9f3;
+  --delay-fill: #ffffff;
   --edge: #656d76;
   --selection: #0969da;
   --error: #cf222e;
@@ -22,10 +20,8 @@
   --fg-dim: #8d96a0;
   --border: #30363d;
   --accent: #4493f8;
-  --node-fill: #121d2f;
-  --node-stroke: #1f6feb;
-  --delay-fill: #272115;
-  --delay-stroke: #9e6a03;
+  --node-fill: #2c2c54;
+  --delay-fill: #1c2128;
   --edge: #8d96a0;
   --selection: #4493f8;
   --error: #f85149;
@@ -122,12 +118,15 @@ body {
   color: var(--accent);
 }
 
-/* diagram */
+/* diagram — mimics the ForSyDe lecture-notes / TikZ figure style:
+   serif math typography, lavender single-stroke circles, thin black
+   edges with small filled arrowheads, dashed system boundary. */
 svg.diagram {
   width: 100%;
   height: 100%;
   display: block;
   cursor: grab;
+  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
 }
 
 svg.diagram.stale {
@@ -135,39 +134,51 @@ svg.diagram.stale {
   filter: saturate(0.4);
 }
 
+.system-boundary {
+  fill: none;
+  stroke: var(--fg-dim);
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+}
+
+.system-label {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  fill: var(--fg-dim);
+}
+
 .node-shape {
-  stroke-width: 1.5;
+  stroke-width: 1.2;
+  stroke: var(--fg);
 }
 
 .node.actor .node-shape {
   fill: var(--node-fill);
-  stroke: var(--node-stroke);
 }
 
 .node.delay .node-shape {
   fill: var(--delay-fill);
-  stroke: var(--delay-stroke);
 }
 
 .node:hover .node-shape {
-  stroke-width: 2.5;
+  stroke-width: 2;
 }
 
-.node-label {
-  font-size: 13px;
-  font-weight: 600;
+.process-name {
+  font-size: 14px;
+  font-style: italic;
   fill: var(--fg);
 }
 
-.node-label.small {
-  font-size: 11px;
-  font-weight: 500;
+.stack-name {
+  font-size: 12px;
+  font-style: italic;
+  fill: var(--fg);
 }
 
-.node-sublabel {
+.stack-rates {
   font-size: 11px;
-  fill: var(--fg-dim);
-  font-style: italic;
+  fill: var(--fg);
 }
 
 .node-badge {
@@ -176,30 +187,31 @@ svg.diagram.stale {
   fill: var(--accent);
 }
 
-.io-label {
-  font-size: 12px;
-  font-weight: 600;
-  fill: var(--fg-dim);
+.io-label,
+.signal-label {
+  font-size: 13px;
+  font-style: italic;
+  fill: var(--fg);
 }
 
 .edge-line {
   fill: none;
-  stroke: var(--edge);
-  stroke-width: 1.5;
+  stroke: var(--fg);
+  stroke-width: 1;
 }
 
 .arrow-head {
-  fill: var(--edge);
+  fill: var(--fg);
 }
 
 .rate-label {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 10.5px;
   fill: var(--fg);
 }
 
 .buffer-label {
   font-size: 10px;
+  font-style: normal;
   fill: var(--fg-dim);
 }
 

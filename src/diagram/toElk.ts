@@ -3,13 +3,13 @@ import type { IRSystem } from '../core/ir';
 import { isDelay } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
 
-export const NODE_KIND = { actor: 'actor', delay: 'delay', io: 'io' } as const;
-
 /** Extra data render.ts reads back from the laid-out graph. */
 export interface NodeMeta {
-  kind: (typeof NODE_KIND)[keyof typeof NODE_KIND];
+  kind: 'actor' | 'delay' | 'io';
+  /** Process name, shown outside above the circle (math-italic style). */
   label: string;
-  sublabel?: string;
+  /** Stacked lines inside the circle: constructor / rates / function. */
+  stack?: string[];
   badge?: string;
 }
 
@@ -20,11 +20,17 @@ export interface EdgeMeta {
   buffer?: number;
 }
 
-const CHAR_W = 8.2;
+const CHAR_W = 7.5;
 
-function nodeSize(label: string, sublabel?: string): { width: number; height: number } {
-  const chars = Math.max(label.length, (sublabel ?? '').length);
-  return { width: Math.max(72, chars * CHAR_W + 24), height: sublabel ? 52 : 40 };
+/** Circle diameter fitting the widest stacked line (forsyde figure style). */
+function circleSize(stack: string[]): { width: number; height: number } {
+  const chars = Math.max(...stack.map((s) => s.length), 4);
+  const d = Math.max(56, chars * CHAR_W + 18);
+  return { width: d, height: d };
+}
+
+function rateGroup(rates: number[]): string {
+  return rates.length === 1 ? String(rates[0]) : `(${rates.join(',')})`;
 }
 
 export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): ElkNode {
@@ -36,38 +42,34 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): ElkNo
   const edgeMeta = new Map<string, EdgeMeta>();
 
   for (const p of ir.processes) {
-    if (isDelay(p)) {
-      meta.set(p.name, { kind: 'delay', label: `[${p.tokens.join(', ')}]` });
-      children.push({
-        id: p.name,
-        width: Math.max(44, p.tokens.join(', ').length * CHAR_W + 20),
-        height: 28,
-        layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE' },
-        ports: portList(p.name, ir),
-      });
-    } else {
-      const badge = scheduled?.repetitions.get(p.name);
-      meta.set(p.name, {
-        kind: 'actor',
-        label: p.name,
-        sublabel: p.function === 'NULL' ? '⊥' : p.function,
-        badge: badge !== undefined ? `×${badge}` : undefined,
-      });
-      children.push({
-        id: p.name,
-        ...nodeSize(p.name, p.function),
-        layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE' },
-        ports: portList(p.name, ir),
-      });
-    }
+    const badge = scheduled?.repetitions.get(p.name);
+    const stack = isDelay(p)
+      ? ['delaySDF', `[${p.tokens.join(',')}]`]
+      : [
+          `actor${p.type.slice(5)}SDF`,
+          `${rateGroup(p.inRates)} ${rateGroup(p.outRates)}`,
+          p.function === 'NULL' ? '⊥' : p.function,
+        ];
+    meta.set(p.name, {
+      kind: isDelay(p) ? 'delay' : 'actor',
+      label: p.name,
+      stack,
+      badge: !isDelay(p) && badge !== undefined ? `×${badge}` : undefined,
+    });
+    children.push({
+      id: p.name,
+      ...circleSize(stack),
+      layoutOptions: { 'elk.portConstraints': 'FIXED_SIDE' },
+      ports: portList(p.name, ir),
+    });
   }
 
   for (const io of ir.inputs) {
     meta.set(io, { kind: 'io', label: io });
     children.push({
       id: io,
-      ...nodeSize(io),
-      height: 28,
+      width: Math.max(30, io.length * CHAR_W),
+      height: 20,
       layoutOptions: { 'elk.layered.layering.layerConstraint': 'FIRST' },
     });
   }
@@ -75,8 +77,8 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): ElkNo
     meta.set(io, { kind: 'io', label: io });
     children.push({
       id: io,
-      ...nodeSize(io),
-      height: 28,
+      width: Math.max(30, io.length * CHAR_W),
+      height: 20,
       layoutOptions: { 'elk.layered.layering.layerConstraint': 'LAST' },
     });
   }
@@ -109,8 +111,8 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): ElkNo
       'elk.algorithm': 'layered',
       'elk.direction': 'RIGHT',
       'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '56',
-      'elk.spacing.nodeNode': '28',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '64',
+      'elk.spacing.nodeNode': '44',
       'elk.spacing.edgeNode': '16',
     },
     children,
