@@ -1,5 +1,7 @@
 # ForSyDe Playground
 
+Try it: https://ramadhanafif.github.io/ForSyDe-Diagram-Web/
+
 Live SDF dataflow diagrams for [ForSyDe Shallow](https://forsyde.github.io/forsyde-shallow/)
 models, fully in the browser. Type a model on the left, see the laid-out dataflow graph —
 with repetition vector, buffer sizes and rates — on the right. No install, no backend.
