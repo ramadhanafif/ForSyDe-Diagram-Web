@@ -44,6 +44,8 @@ export type ProcBody =
   | {
       form: 'actor';
       actorType: ActorType;
+      /** Span of the `actorNMSDF` constructor token itself. */
+      ctorSpan: Span;
       inRates: RateLit[];
       outRates: RateLit[];
       fn: Ident; // name may be 'undefined'

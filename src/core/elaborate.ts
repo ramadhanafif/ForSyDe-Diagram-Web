@@ -65,6 +65,8 @@ export function elaborate(mod: HsModule): {
     procSpans.set(p.name, {
       specBinding: spec.span,
       name: spec.name.span,
+      constructorSpan: spec.body.form === 'actor' ? spec.body.ctorSpan : undefined,
+      etaParams: spec.etaParams,
       inRates: spec.body.form === 'actor' ? spec.body.inRates.map((r) => r.span) : [],
       outRates: spec.body.form === 'actor' ? spec.body.outRates.map((r) => r.span) : [],
       fnName: spec.body.form === 'actor' ? spec.body.fn.span : undefined,

@@ -35,7 +35,13 @@ function rateGroup(rates: number[]): string {
   return rates.length === 1 ? String(rates[0]) : `(${rates.join(',')})`;
 }
 
-export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): ElkNode {
+export interface DiagramGraph {
+  graph: ElkNode;
+  meta: Map<string, NodeMeta>;
+  edgeMeta: Map<string, EdgeMeta>;
+}
+
+export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): DiagramGraph {
   const children: ElkNode[] = [];
   const edges: ElkExtendedEdge[] = [];
   const scheduled = sched?.ok ? sched : null;
@@ -121,7 +127,7 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): ElkNo
     children,
     edges,
   };
-  return Object.assign(graph, { $meta: meta, $edgeMeta: edgeMeta });
+  return { graph, meta, edgeMeta };
 }
 
 function isProcess(name: string, ir: IRSystem): boolean {
@@ -134,9 +140,17 @@ function portId(node: string, signal: string, dir: 'in' | 'out', ir: IRSystem): 
 
 function portList(name: string, ir: IRSystem): ElkNode['ports'] {
   const ports: NonNullable<ElkNode['ports']> = [];
+  // a signal can appear twice (consumed + system output); ports must be unique
+  const seen = new Set<string>();
+  const push = (p: NonNullable<ElkNode['ports']>[number]) => {
+    if (!seen.has(p.id)) {
+      seen.add(p.id);
+      ports.push(p);
+    }
+  };
   for (const s of ir.signals) {
     if (s.target.name === name) {
-      ports.push({
+      push({
         id: `${name}.in.${s.name}`,
         width: 2,
         height: 2,
@@ -144,7 +158,7 @@ function portList(name: string, ir: IRSystem): ElkNode['ports'] {
       });
     }
     if (s.source.name === name) {
-      ports.push({
+      push({
         id: `${name}.out.${s.name}`,
         width: 2,
         height: 2,

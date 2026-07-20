@@ -24,21 +24,30 @@ Deploys to GitHub Pages from `main` via `.github/workflows/deploy.yml`.
 
 ## Editing from the diagram
 
-The diagram is clickable and every edit is applied as a plain text change to
-the source, which stays the single source of truth:
+The diagram (React Flow, laid out by elk) is interactive and every edit is
+applied as a plain text change to the source, which stays the single source
+of truth:
 
 - click an edge to insert an actor or delay in the middle of it, or to rename
   the signal
 - click a process to change its name, rates, function or delay tokens, jump
   to the function definition, or delete it (1-in-1-out processes; the
   consumer is rewired to the producer)
+- drag from an output port to the dashed input dot of an actor to feed that
+  signal in as a new input; the actor's constructor and rates are rewritten
+  in the source (point-free specs with unconsumed source signals only)
 - the Add actor toolbar button adds an actor fed by a new system input, wired
   to a new system output
 - new actors get a runnable function stub appended to the file, for example
   `f_5 :: [Int] -> [Int]` with `f_5 _ = replicate 1 0`
+- nodes can be dragged to inspect a layout; positions are ephemeral and reset
+  at the next re-layout since they are not part of the source
 
 Undo works through the editor history as usual, since diagram edits are
 ordinary text edits.
+
+Two diagram styles are available from the toolbar: a modern default and a
+lecture style that mimics the ForSyDe lecture notes / forsyde-latex figures.
 
 ## Supported model subset
 

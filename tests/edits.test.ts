@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addInput,
   addSourceActor,
   applySplices,
   deleteProcess,
@@ -144,6 +145,42 @@ describe('diagram edit operations', () => {
     expect(irBack.signals.map((s) => [s.name, s.source.name, s.target.name])).toEqual(
       ir.signals.map((s) => [s.name, s.source.name, s.target.name]),
     );
+  });
+
+  it('adds an input to an actor from an unconsumed signal (drag-to-connect)', () => {
+    // s_out is only a system output, so it may fan into a_a as a new input
+    const ir = build(MODEL);
+    const splices = addInput(MODEL, ir, 'a_a', 's_out');
+    expect(splices).not.toBeNull();
+    const { next, ir: ir2 } = roundTrip(MODEL, splices!);
+    expect(next).toContain('a_a = actor21SDF (1, 1) 2 f');
+    expect(next).toContain('s_1 = a_a s_in s_out');
+    expect(ir2.signals.some((s) => s.name === 's_out' && s.target.name === 'a_a')).toBe(true);
+  });
+
+  it('adds a third input, extending an existing rate tuple', () => {
+    const ir = build(MODEL);
+    const once = applySplices(MODEL, addInput(MODEL, ir, 'a_a', 's_out')!);
+    const irOnce = build(once);
+    // wire in a fresh system input as well
+    const withInput = applySplices(once, addSourceActor(once, irOnce).splices);
+    const ir2 = build(withInput);
+    const freeSignal = ir2.outputs.find((o) => o !== 's_out')!;
+    const splices = addInput(withInput, ir2, 'a_a', freeSignal);
+    expect(splices).not.toBeNull();
+    const { next } = roundTrip(withInput, splices!);
+    expect(next).toMatch(/a_a = actor31SDF \(1, 1, 1\) 2 f/);
+  });
+
+  it('refuses invalid connect targets and sources', () => {
+    const ir = build(MODEL);
+    expect(addInput(MODEL, ir, 'd_d', 's_out')).toBeNull(); // delay target
+    expect(addInput(MODEL, ir, 'a_a', 's_1')).toBeNull(); // s_1 already consumed by d_d
+    expect(addInput(MODEL, ir, 'a_b', 's_out')).toBeNull(); // self-loop: a_b produces s_out
+    expect(addInput(MODEL, ir, 'a_a', 's_ghost')).toBeNull(); // unknown signal
+    const eta = MODEL.replace('a_a = actor11SDF 1 2 f', 'a_a s = actor11SDF 1 2 f s');
+    const irEta = build(eta);
+    expect(addInput(eta, irEta, 'a_a', 's_out')).toBeNull(); // eta-expanded spec
   });
 
   it('refuses to delete a multi-port process', () => {

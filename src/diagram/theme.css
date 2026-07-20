@@ -8,9 +8,14 @@
   --node-fill: #d9d9f3;
   --delay-fill: #ffffff;
   --edge: #656d76;
-  --selection: #0969da;
   --error: #cf222e;
   --warning: #9a6700;
+  --actor-fill-modern: #dbeafe;
+  --actor-stroke-modern: #93b4e6;
+  --delay-fill-modern: #fef3c7;
+  --delay-stroke-modern: #e0c36b;
+  --io-fill-modern: #eef1f4;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
 }
 
 [data-theme='dark'] {
@@ -23,9 +28,14 @@
   --node-fill: #2c2c54;
   --delay-fill: #1c2128;
   --edge: #8d96a0;
-  --selection: #4493f8;
   --error: #f85149;
   --warning: #d29922;
+  --actor-fill-modern: #1e3a5f;
+  --actor-stroke-modern: #3d6a9e;
+  --delay-fill-modern: #3d3520;
+  --delay-stroke-modern: #7a6a35;
+  --io-fill-modern: #21262d;
+  --shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -83,10 +93,6 @@ body {
   overflow: hidden;
 }
 
-.editor-pane {
-  border-right: none;
-}
-
 .diagram-pane {
   position: relative;
   background: var(--bg);
@@ -101,7 +107,6 @@ body {
   background: var(--accent);
 }
 
-/* toolbar controls */
 .toolbar select,
 .toolbar button {
   font: inherit;
@@ -118,109 +123,81 @@ body {
   color: var(--accent);
 }
 
-/* diagram, mimics the ForSyDe lecture-notes / TikZ figure style:
-   serif math typography, lavender single-stroke circles, thin black
-   edges with small filled arrowheads, dashed system boundary. */
-svg.diagram {
-  width: 100%;
+.editor-host {
   height: 100%;
-  display: block;
-  cursor: grab;
-  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
 }
 
-svg.diagram.stale {
+/* ------------------------------------------------------------------ */
+/* diagram shared structure                                            */
+
+.diagram-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.diagram-wrap.stale {
   opacity: 0.45;
   filter: saturate(0.4);
 }
 
-.system-boundary {
-  fill: none;
-  stroke: var(--fg-dim);
-  stroke-width: 1;
-  stroke-dasharray: 5 4;
+.react-flow {
+  background: var(--bg);
 }
 
-.system-label {
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
-  fill: var(--fg-dim);
+.fsd-node {
+  position: relative;
 }
 
-.node-shape {
-  stroke-width: 1.2;
-  stroke: var(--fg);
-}
-
-.node.actor .node-shape {
-  fill: var(--node-fill);
-}
-
-.node.delay .node-shape {
-  fill: var(--delay-fill);
-}
-
-.node:hover .node-shape {
-  stroke-width: 2;
+.node-svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
 }
 
 .process-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -24px;
+  text-align: center;
+  white-space: nowrap;
   font-size: 14px;
-  font-style: italic;
-  fill: var(--fg);
-}
-
-.stack-name {
-  font-size: 12px;
-  font-style: italic;
-  fill: var(--fg);
-}
-
-.stack-rates {
-  font-size: 11px;
-  fill: var(--fg);
 }
 
 .node-badge {
   font-size: 10px;
   font-weight: 700;
-  fill: var(--accent);
+  color: var(--accent);
+  margin-left: 6px;
 }
 
-.io-label,
-.signal-label {
+.stack {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 14px;
+  pointer-events: none;
+}
+
+.stack-name {
+  font-size: 12px;
+}
+
+.stack-rates {
+  font-size: 11px;
+}
+
+.io-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 13px;
-  font-style: italic;
-  fill: var(--fg);
-}
-
-.edge-line {
-  fill: none;
-  stroke: var(--fg);
-  stroke-width: 1;
-}
-
-.edge-hit {
-  fill: none;
-  stroke: transparent;
-  stroke-width: 14;
-}
-
-.edge {
-  cursor: pointer;
-}
-
-.edge:hover .edge-line {
-  stroke: var(--accent);
-}
-
-.node.actor,
-.node.delay {
-  cursor: pointer;
-}
-
-.arrow-head {
-  fill: var(--fg);
+  white-space: nowrap;
 }
 
 .rate-label {
@@ -228,10 +205,221 @@ svg.diagram.stale {
   fill: var(--fg);
 }
 
+.signal-label {
+  font-size: 13px;
+  fill: var(--fg);
+}
+
 .buffer-label {
   font-size: 10px;
   font-style: normal;
   fill: var(--fg-dim);
+}
+
+.arrow-head {
+  fill: var(--fg);
+}
+
+.system-boundary-box {
+  border: 1px dashed var(--fg-dim);
+  pointer-events: none;
+}
+
+.system-label {
+  font-size: 12px;
+  color: var(--fg-dim);
+  pointer-events: none;
+}
+
+.react-flow__edge .react-flow__edge-path {
+  stroke: var(--fg);
+  stroke-width: 1;
+  fill: none;
+}
+
+.react-flow__edge {
+  cursor: pointer;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+/* minimap */
+.react-flow__minimap {
+  background: var(--bg-panel);
+}
+
+.react-flow__minimap-mask {
+  fill: color-mix(in srgb, var(--fg-dim) 12%, transparent);
+}
+
+.mm-actor {
+  fill: var(--actor-fill-modern);
+}
+
+.mm-delay {
+  fill: var(--delay-fill-modern);
+}
+
+.mm-io {
+  fill: var(--io-fill-modern);
+}
+
+/* handles */
+.react-flow__handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bg);
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.new-input-handle.react-flow__handle {
+  background: var(--bg);
+  border: 1.5px dashed var(--accent);
+  width: 9px;
+  height: 9px;
+  top: 50%;
+}
+
+/* ------------------------------------------------------------------ */
+/* modern theme (default)                                              */
+
+.diagram-modern .react-flow {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.diagram-modern .node-shape {
+  stroke-width: 1.25;
+}
+
+.diagram-modern .actor .node-shape {
+  fill: var(--actor-fill-modern);
+  stroke: var(--actor-stroke-modern);
+}
+
+.diagram-modern .delay .node-shape {
+  fill: var(--delay-fill-modern);
+  stroke: var(--delay-stroke-modern);
+}
+
+.diagram-modern .fsd-node.actor,
+.diagram-modern .fsd-node.delay {
+  filter: drop-shadow(var(--shadow));
+  transition: filter 0.12s;
+}
+
+.diagram-modern .fsd-node.actor:hover,
+.diagram-modern .fsd-node.delay:hover {
+  filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.25));
+}
+
+.diagram-modern .process-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.diagram-modern .stack-name {
+  font-size: 11px;
+  color: var(--fg);
+}
+
+.diagram-modern .stack-name:first-child {
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
+.diagram-modern .stack-rates {
+  color: var(--fg-dim);
+}
+
+.diagram-modern .fsd-node.io .io-label {
+  background: var(--io-fill-modern);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+
+.diagram-modern .react-flow__edge .react-flow__edge-path {
+  stroke: var(--edge);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.diagram-modern .react-flow__edge:hover .react-flow__edge-path,
+.diagram-modern .react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+.diagram-modern .signal-label {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.diagram-modern .rate-label {
+  font-size: 10px;
+  fill: var(--fg-dim);
+}
+
+.diagram-modern .arrow-head {
+  fill: var(--edge);
+}
+
+.diagram-modern .system-boundary-box {
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+}
+
+/* ------------------------------------------------------------------ */
+/* lecture theme: the ForSyDe lecture-notes / TikZ figure style        */
+
+.diagram-lecture .react-flow {
+  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
+}
+
+.diagram-lecture .node-shape {
+  stroke-width: 1.2;
+  stroke: var(--fg);
+}
+
+.diagram-lecture .actor .node-shape {
+  fill: var(--node-fill);
+}
+
+.diagram-lecture .delay .node-shape {
+  fill: var(--delay-fill);
+}
+
+.diagram-lecture .fsd-node:hover .node-shape {
+  stroke-width: 2;
+}
+
+.diagram-lecture .process-name,
+.diagram-lecture .stack-name,
+.diagram-lecture .io-label,
+.diagram-lecture .signal-label {
+  font-style: italic;
+}
+
+.diagram-lecture .signal-label {
+  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
+}
+
+.diagram-lecture .rate-label {
+  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
+}
+
+.diagram-lecture .react-flow__handle {
+  opacity: 0;
+}
+
+.diagram-lecture .new-input-handle.react-flow__handle {
+  opacity: 0;
+}
+
+.diagram-lecture .react-flow__minimap {
+  display: none;
 }
 
 /* overlays */
@@ -243,6 +431,7 @@ svg.diagram.stale {
   border-radius: 6px;
   font-size: 12px;
   pointer-events: none;
+  z-index: 5;
 }
 
 .status-chip {
@@ -257,11 +446,7 @@ svg.diagram.stale {
   color: #fff;
 }
 
-/* diagram edit popover */
-.popover[hidden] {
-  display: none;
-}
-
+/* edit popover */
 .popover {
   position: absolute;
   z-index: 10;

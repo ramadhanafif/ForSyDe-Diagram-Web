@@ -34,6 +34,10 @@ export interface ProcessSpans {
   specBinding: Span;
   /** The process name identifier in its top-level spec. */
   name: Span;
+  /** The actorNMSDF constructor token (actors only). */
+  constructorSpan?: Span;
+  /** Explicit signal params in the spec (0 = point-free). */
+  etaParams: number;
   inRates: Span[];
   outRates: Span[];
   fnName?: Span;

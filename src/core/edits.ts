@@ -197,6 +197,55 @@ export function renameSignal(
 }
 
 /**
+ * Feed an existing produced-or-input signal into an additional input of an
+ * actor (drag-to-connect). Bumps the constructor arity, adds a rate of 1 and
+ * appends the signal to the actor's binding. Point-free specs only: an
+ * eta-expanded spec would also need its params, application tail and type
+ * signature rewritten.
+ * ponytail: the actor's function is left untouched (bodies are opaque), so a
+ * regenerated fixture would need a manual function-arity fix.
+ */
+export function addInput(
+  source: string,
+  ir: IRSystem,
+  procName: string,
+  signalName: string,
+): Splice[] | null {
+  const spans = ir.spans.processes.get(procName);
+  const p = ir.processes.find((q) => q.name === procName);
+  if (!spans?.constructorSpan || !p || isDelay(p)) return null;
+  if (spans.etaParams > 0 || spans.systemBindings.length !== 1) return null;
+  if (p.inRates.length >= 4) return null;
+  // the signal must exist and must not already be consumed by a process
+  const isInput = ir.inputs.includes(signalName);
+  const produced = ir.signals.some((s) => s.name === signalName);
+  const signalOccurs = ir.spans.signals.has(signalName);
+  if (!isInput && !produced && !signalOccurs) return null;
+  const consumedByProc = ir.signals.some(
+    (s) => s.name === signalName && ir.processes.some((q) => q.name === s.target.name),
+  );
+  if (consumedByProc) return null;
+  // no direct self-loop
+  const producer = ir.signals.find((s) => s.name === signalName)?.source.name;
+  if (producer === procName) return null;
+
+  const nIn = p.inRates.length;
+  const nOut = p.outRates.length;
+  const splices: Splice[] = [
+    replaceSpan(spans.constructorSpan, `actor${nIn + 1}${nOut}SDF`),
+    nIn === 1
+      ? replaceSpan(spans.inRates[0]!, `(${p.inRates[0]}, 1)`)
+      : { from: spans.inRates[nIn - 1]!.to, to: spans.inRates[nIn - 1]!.to, insert: ', 1' },
+    {
+      from: spans.systemBindings[0]!.to,
+      to: spans.systemBindings[0]!.to,
+      insert: ` ${signalName}`,
+    },
+  ];
+  return splices;
+}
+
+/**
  * Remove a process. Supported cases: a 1-in-1-out process bound in the system
  * (consumers are rewired to its input signal) or an unbound spec.
  * Returns null when deletion would need cascading edits.

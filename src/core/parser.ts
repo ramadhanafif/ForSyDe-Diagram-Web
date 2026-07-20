@@ -152,7 +152,7 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
       return null;
     }
     const actorType = `Actor${nIn}${nOut}` as ActorType;
-    return { form: 'actor', actorType, inRates, outRates, fn: ident(fnTok) };
+    return { form: 'actor', actorType, ctorSpan: head.span, inRates, outRates, fn: ident(fnTok) };
   }
   if (head.text === 'delaySDF') {
     const open = c.expectPunct('[');
