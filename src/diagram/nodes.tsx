@@ -50,11 +50,17 @@ function CircleNode({ data }: NodeProps<FlowNode>) {
         {meta.badge && <span className="node-badge">{meta.badge}</span>}
       </div>
       <div className="stack">
-        {stack.map((line, i) => (
-          <div key={i} className={i === 1 && stack.length === 3 ? 'stack-rates' : 'stack-name'}>
-            {line}
-          </div>
-        ))}
+        {stack.map((line, i) => {
+          const kinds =
+            meta.kind === 'delay'
+              ? ['stack-ctor', 'stack-tokens']
+              : ['stack-ctor', 'stack-rates', 'stack-fn'];
+          return (
+            <div key={i} className={`stack-line ${kinds[i] ?? 'stack-line'}`}>
+              {line}
+            </div>
+          );
+        })}
       </div>
       <Ports ports={ports} />
       {meta.kind === 'actor' && (

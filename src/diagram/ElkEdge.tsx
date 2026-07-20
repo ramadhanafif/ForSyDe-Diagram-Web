@@ -9,14 +9,16 @@ function MathText({
 }: { name: string; suffix?: string } & React.SVGProps<SVGTextElement>) {
   const idx = name.indexOf('_');
   const plain = idx <= 0 || idx === name.length - 1;
+  // the name lives in its own tspans so signal names and buffer sizes
+  // can be shown or hidden independently
   return (
     <text {...attrs}>
       {plain ? (
-        name
+        <tspan className="sig-name">{name}</tspan>
       ) : (
         <>
-          <tspan>{name.slice(0, idx)}</tspan>
-          <tspan baselineShift="sub" fontSize="75%">
+          <tspan className="sig-name">{name.slice(0, idx)}</tspan>
+          <tspan className="sig-name" baselineShift="sub" fontSize="75%">
             {name.slice(idx + 1).replace(/_/g, ',')}
           </tspan>
         </>

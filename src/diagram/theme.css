@@ -204,7 +204,7 @@ body {
   pointer-events: none;
 }
 
-.stack-name {
+.stack-line {
   font-size: 12px;
 }
 
@@ -342,12 +342,12 @@ body {
   font-size: 13px;
 }
 
-.diagram-modern .stack-name {
+.diagram-modern .stack-line {
   font-size: 11px;
   color: var(--fg);
 }
 
-.diagram-modern .stack-name:first-child {
+.diagram-modern .stack-ctor {
   color: var(--fg-dim);
   font-size: 10px;
 }
@@ -394,50 +394,37 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* progressive disclosure, user-controlled from the floating switch.
-   minimal: names only; normal: names + functions + signals;
-   full: everything. Hover or selection always reveals full detail. */
+/* progressive disclosure: one explicit toggle per annotation kind,
+   driven by the floating "show" switch. Hover or selection reveals
+   full detail on that element regardless of the toggles. */
 
-.detail-minimal .stack,
-.detail-minimal .node-badge,
-.detail-minimal .rate-label,
-.detail-minimal .signal-label {
+.hide-signals .sig-name {
   display: none;
 }
 
-/* minimal: process name moves inside the circle */
-.detail-minimal .process-name {
-  top: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.detail-normal .stack > :first-child,
-.detail-normal .stack-rates,
-.detail-normal .rate-label,
-.detail-normal .buffer-label {
+.hide-rates .rate-label,
+.hide-rates .stack-rates {
   display: none;
 }
 
-/* hover or selection reveals everything, at any level */
-.fsd-node:hover .stack,
-.react-flow__node.selected .stack {
-  display: flex;
+.hide-buffers .buffer-label {
+  display: none;
 }
 
-.fsd-node:hover .stack > :first-child,
-.react-flow__node.selected .stack > :first-child,
-.fsd-node:hover .stack-rates,
-.react-flow__node.selected .stack-rates {
-  display: block;
+.hide-repetitions .node-badge {
+  display: none;
 }
 
-.detail-minimal .fsd-node:hover .process-name,
-.detail-minimal .react-flow__node.selected .process-name {
-  top: -24px;
-  bottom: auto;
+.hide-constructors .stack-ctor {
+  display: none;
+}
+
+.hide-functions .stack-fn {
+  display: none;
+}
+
+.fsd-node:hover .stack-line,
+.react-flow__node.selected .stack-line {
   display: block;
 }
 
@@ -446,8 +433,8 @@ body {
   display: inline;
 }
 
-.react-flow__edge:hover .signal-label,
-.react-flow__edge.selected .signal-label,
+.react-flow__edge:hover .sig-name,
+.react-flow__edge.selected .sig-name,
 .react-flow__edge:hover .rate-label,
 .react-flow__edge.selected .rate-label,
 .react-flow__edge:hover .buffer-label,
@@ -472,6 +459,16 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
+}
+
+.float-controls .switch-title {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-dim);
+  background: var(--bg-panel);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .float-controls button {
@@ -596,7 +593,9 @@ body {
 }
 
 .diagram-lecture .process-name,
-.diagram-lecture .stack-name,
+.diagram-lecture .stack-ctor,
+.diagram-lecture .stack-fn,
+.diagram-lecture .stack-tokens,
 .diagram-lecture .io-label,
 .diagram-lecture .signal-label {
   font-style: italic;

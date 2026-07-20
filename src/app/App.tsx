@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { addInput, addSourceActor, insertOnEdge } from '../core/edits';
 import type { ScheduleResult } from '../core/schedule';
-import { DiagramPane, type DetailLevel } from '../diagram/DiagramPane';
+import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
 import { examples } from './examples';
@@ -74,7 +74,14 @@ function SchedulePanel({
   );
 }
 
-const DETAIL_LEVELS: DetailLevel[] = ['minimal', 'normal', 'full'];
+const FLAG_LABELS: [keyof ShowFlags, string][] = [
+  ['signals', 'signal names'],
+  ['rates', 'rates'],
+  ['buffers', 'buffer sizes'],
+  ['repetitions', 'repetitions'],
+  ['constructors', 'constructors'],
+  ['functions', 'functions'],
+];
 
 function Legend() {
   return (
@@ -140,12 +147,15 @@ export function App() {
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [detailLevel, setDetailLevel] = useState<DetailLevel>(() => {
-    const saved = localStorage.getItem('detailLevel');
-    return DETAIL_LEVELS.includes(saved as DetailLevel) ? (saved as DetailLevel) : 'full';
+  const [showFlags, setShowFlags] = useState<ShowFlags>(() => {
+    try {
+      return { ...DEFAULT_FLAGS, ...JSON.parse(localStorage.getItem('showFlags') ?? '{}') };
+    } catch {
+      return DEFAULT_FLAGS;
+    }
   });
   const [legendOpen, setLegendOpen] = useState(false);
-  useEffect(() => localStorage.setItem('detailLevel', detailLevel), [detailLevel]);
+  useEffect(() => localStorage.setItem('showFlags', JSON.stringify(showFlags)), [showFlags]);
   const [appTheme, setAppTheme] = useState(initialAppTheme);
   const [diagramTheme, setDiagramTheme] = useState(initialDiagramTheme);
   const [fitRequest, setFitRequest] = useState(0);
@@ -297,7 +307,7 @@ export function App() {
             dg={model?.dg ?? null}
             showUnitRates={showUnitRates}
             stale={pipe.stale}
-            detailLevel={detailLevel}
+            showFlags={showFlags}
             fitRequest={fitRequest}
             consumePendingFit={consumePendingFit}
             onNodeClick={(id, cx, cy) => {
@@ -313,14 +323,15 @@ export function App() {
             onDropInsert={onDropInsert}
           />
           <div className="float-controls">
-            <span className="detail-switch" title="How much detail the diagram shows">
-              {DETAIL_LEVELS.map((l) => (
+            <span className="detail-switch" title="Toggle each annotation on the diagram">
+              <span className="switch-title">show</span>
+              {FLAG_LABELS.map(([key, label]) => (
                 <button
-                  key={l}
-                  className={l === detailLevel ? 'active' : ''}
-                  onClick={() => setDetailLevel(l)}
+                  key={key}
+                  className={showFlags[key] ? 'active' : ''}
+                  onClick={() => setShowFlags((f) => ({ ...f, [key]: !f[key] }))}
                 >
-                  {l}
+                  {label}
                 </button>
               ))}
             </span>

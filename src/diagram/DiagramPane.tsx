@@ -34,14 +34,30 @@ function edgeElementAt(x: number, y: number): Element | null {
   return null;
 }
 
-export type DetailLevel = 'minimal' | 'normal' | 'full';
+/** Per-annotation visibility, driven by the floating toggles in the pane. */
+export interface ShowFlags {
+  signals: boolean;
+  rates: boolean;
+  buffers: boolean;
+  repetitions: boolean;
+  constructors: boolean;
+  functions: boolean;
+}
+
+export const DEFAULT_FLAGS: ShowFlags = {
+  signals: true,
+  rates: true,
+  buffers: true,
+  repetitions: true,
+  constructors: true,
+  functions: true,
+};
 
 interface Props extends DiagramCallbacks {
   dg: DiagramGraph | null;
   showUnitRates: boolean;
   stale: boolean;
-  /** User-selected disclosure level (floating control in the pane). */
-  detailLevel: DetailLevel;
+  showFlags: ShowFlags;
   /** Increment to request a fit-to-view (Fit button). */
   fitRequest: number;
   /** Polled after each graph update; returns true when a fit is pending (example load). */
@@ -100,7 +116,10 @@ function Diagram(props: Props) {
 
   return (
     <ReactFlow
-      className={`detail-${props.detailLevel}`}
+      className={Object.entries(props.showFlags)
+        .filter(([, on]) => !on)
+        .map(([k]) => `hide-${k}`)
+        .join(' ')}
       nodes={nodes}
       edges={edges}
       onNodesChange={onNodesChange}
