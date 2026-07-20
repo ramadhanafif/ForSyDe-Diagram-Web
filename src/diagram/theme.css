@@ -394,19 +394,19 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* progressive disclosure (modern style only): semantic zoom bands.
-   overview: names only; normal: names + functions + signals;
-   detail: everything. Hover or selection always reveals full detail. */
+/* progressive disclosure, user-controlled from the floating switch.
+   minimal: names only; normal: names + functions + signals;
+   full: everything. Hover or selection always reveals full detail. */
 
-.diagram-modern .detail-overview .stack,
-.diagram-modern .detail-overview .node-badge,
-.diagram-modern .detail-overview .rate-label,
-.diagram-modern .detail-overview .signal-label {
+.detail-minimal .stack,
+.detail-minimal .node-badge,
+.detail-minimal .rate-label,
+.detail-minimal .signal-label {
   display: none;
 }
 
-/* overview: process name moves inside the circle */
-.diagram-modern .detail-overview .process-name {
+/* minimal: process name moves inside the circle */
+.detail-minimal .process-name {
   top: 0;
   bottom: 0;
   display: flex;
@@ -414,45 +414,161 @@ body {
   justify-content: center;
 }
 
-.diagram-modern .detail-normal .stack > :first-child,
-.diagram-modern .detail-normal .stack-rates,
-.diagram-modern .detail-normal .rate-label,
-.diagram-modern .detail-normal .buffer-label {
+.detail-normal .stack > :first-child,
+.detail-normal .stack-rates,
+.detail-normal .rate-label,
+.detail-normal .buffer-label {
   display: none;
 }
 
-/* hover or selection reveals everything, in any band */
-.diagram-modern .fsd-node:hover .stack,
-.diagram-modern .react-flow__node.selected .stack {
+/* hover or selection reveals everything, at any level */
+.fsd-node:hover .stack,
+.react-flow__node.selected .stack {
   display: flex;
 }
 
-.diagram-modern .fsd-node:hover .stack > :first-child,
-.diagram-modern .react-flow__node.selected .stack > :first-child,
-.diagram-modern .fsd-node:hover .stack-rates,
-.diagram-modern .react-flow__node.selected .stack-rates {
+.fsd-node:hover .stack > :first-child,
+.react-flow__node.selected .stack > :first-child,
+.fsd-node:hover .stack-rates,
+.react-flow__node.selected .stack-rates {
   display: block;
 }
 
-.diagram-modern .detail-overview .fsd-node:hover .process-name,
-.diagram-modern .detail-overview .react-flow__node.selected .process-name {
+.detail-minimal .fsd-node:hover .process-name,
+.detail-minimal .react-flow__node.selected .process-name {
   top: -24px;
   bottom: auto;
   display: block;
 }
 
-.diagram-modern .fsd-node:hover .node-badge,
-.diagram-modern .react-flow__node.selected .node-badge {
+.fsd-node:hover .node-badge,
+.react-flow__node.selected .node-badge {
   display: inline;
 }
 
-.diagram-modern .react-flow__edge:hover .signal-label,
-.diagram-modern .react-flow__edge.selected .signal-label,
-.diagram-modern .react-flow__edge:hover .rate-label,
-.diagram-modern .react-flow__edge.selected .rate-label,
-.diagram-modern .react-flow__edge:hover .buffer-label,
-.diagram-modern .react-flow__edge.selected .buffer-label {
+.react-flow__edge:hover .signal-label,
+.react-flow__edge.selected .signal-label,
+.react-flow__edge:hover .rate-label,
+.react-flow__edge.selected .rate-label,
+.react-flow__edge:hover .buffer-label,
+.react-flow__edge.selected .buffer-label {
   display: inline;
+}
+
+/* floating controls on the diagram side */
+.float-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 5;
+}
+
+.float-controls .detail-switch {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.float-controls button {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--fg);
+  background: var(--bg-panel);
+  border: none;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.float-controls > button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.float-controls button.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.float-controls button:hover {
+  color: var(--accent);
+}
+
+/* legend card */
+.legend {
+  position: absolute;
+  top: 12px;
+  left: 92px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 340px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.legend-title {
+  font-weight: 600;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.swatch-actor {
+  background: var(--actor-fill-modern);
+  border: 1px solid var(--actor-stroke-modern);
+}
+
+.swatch-delay {
+  background: var(--delay-fill-modern);
+  border: 1px solid var(--delay-stroke-modern);
+}
+
+.swatch-newinput {
+  background: var(--bg);
+  border: 1.5px dashed var(--accent);
+}
+
+.legend-pill {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--io-fill-modern);
+  font-style: italic;
+}
+
+.legend-glyph {
+  flex: none;
+  min-width: 20px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.legend-badge {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* ------------------------------------------------------------------ */
@@ -504,6 +620,22 @@ body {
 
 .diagram-lecture .react-flow__minimap {
   display: none;
+}
+
+/* legend swatches match the lecture palette when that style is active */
+.diagram-lecture .swatch-actor {
+  background: var(--node-fill);
+  border-color: var(--fg);
+}
+
+.diagram-lecture .swatch-delay {
+  background: var(--delay-fill);
+  border-color: var(--fg);
+}
+
+.diagram-lecture .legend-pill {
+  background: none;
+  border: none;
 }
 
 /* schedule toggle hides all schedule-derived annotations; hard off switch

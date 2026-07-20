@@ -5,7 +5,6 @@ import {
   ViewportPortal,
   useNodesState,
   useReactFlow,
-  useStore,
   type Connection,
   type Edge,
 } from '@xyflow/react';
@@ -35,10 +34,14 @@ function edgeElementAt(x: number, y: number): Element | null {
   return null;
 }
 
+export type DetailLevel = 'minimal' | 'normal' | 'full';
+
 interface Props extends DiagramCallbacks {
   dg: DiagramGraph | null;
   showUnitRates: boolean;
   stale: boolean;
+  /** User-selected disclosure level (floating control in the pane). */
+  detailLevel: DetailLevel;
   /** Increment to request a fit-to-view (Fit button). */
   fitRequest: number;
   /** Polled after each graph update; returns true when a fit is pending (example load). */
@@ -48,12 +51,6 @@ interface Props extends DiagramCallbacks {
 function Diagram(props: Props) {
   const { dg, showUnitRates, fitRequest, consumePendingFit } = props;
   const { fitView } = useReactFlow();
-
-  // semantic zoom band; quantized in the selector so renders happen only on band changes
-  const detailBand = useStore((s) => {
-    const z = s.transform[2];
-    return z < 0.6 ? 'overview' : z < 1.1 ? 'normal' : 'detail';
-  });
 
   const computed = useMemo(
     () => (dg ? toFlow(dg.graph, dg.meta, dg.edgeMeta, showUnitRates) : { nodes: [], edges: [] }),
@@ -103,7 +100,7 @@ function Diagram(props: Props) {
 
   return (
     <ReactFlow
-      className={`detail-${detailBand}`}
+      className={`detail-${props.detailLevel}`}
       nodes={nodes}
       edges={edges}
       onNodesChange={onNodesChange}

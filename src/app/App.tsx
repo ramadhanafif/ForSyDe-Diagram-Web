@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { addInput, addSourceActor, insertOnEdge } from '../core/edits';
 import type { ScheduleResult } from '../core/schedule';
-import { DiagramPane } from '../diagram/DiagramPane';
+import { DiagramPane, type DetailLevel } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
 import { examples } from './examples';
@@ -74,6 +74,44 @@ function SchedulePanel({
   );
 }
 
+const DETAIL_LEVELS: DetailLevel[] = ['minimal', 'normal', 'full'];
+
+function Legend() {
+  return (
+    <div className="legend">
+      <div className="legend-title">Legend</div>
+      <div className="legend-row">
+        <span className="legend-swatch swatch-actor" />
+        <span>actor: constructor, rates, function inside</span>
+      </div>
+      <div className="legend-row">
+        <span className="legend-swatch swatch-delay" />
+        <span>delay with its initial tokens [..]</span>
+      </div>
+      <div className="legend-row">
+        <span className="legend-pill">s</span>
+        <span>system input or output</span>
+      </div>
+      <div className="legend-row">
+        <span className="legend-glyph">2</span>
+        <span>rate at an edge end: tokens produced or consumed per firing</span>
+      </div>
+      <div className="legend-row">
+        <span className="legend-glyph">&middot;4</span>
+        <span>buffer: maximum tokens held on the signal</span>
+      </div>
+      <div className="legend-row">
+        <span className="legend-glyph legend-badge">&times;2</span>
+        <span>repetitions of the actor in one schedule iteration</span>
+      </div>
+      <div className="legend-row">
+        <span className="legend-swatch swatch-newinput" />
+        <span>drop target: drag a signal here to add an input</span>
+      </div>
+    </div>
+  );
+}
+
 const initialAppTheme = (): string =>
   localStorage.getItem('theme') ??
   (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -102,6 +140,12 @@ export function App() {
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [detailLevel, setDetailLevel] = useState<DetailLevel>(() => {
+    const saved = localStorage.getItem('detailLevel');
+    return DETAIL_LEVELS.includes(saved as DetailLevel) ? (saved as DetailLevel) : 'full';
+  });
+  const [legendOpen, setLegendOpen] = useState(false);
+  useEffect(() => localStorage.setItem('detailLevel', detailLevel), [detailLevel]);
   const [appTheme, setAppTheme] = useState(initialAppTheme);
   const [diagramTheme, setDiagramTheme] = useState(initialDiagramTheme);
   const [fitRequest, setFitRequest] = useState(0);
@@ -253,6 +297,7 @@ export function App() {
             dg={model?.dg ?? null}
             showUnitRates={showUnitRates}
             stale={pipe.stale}
+            detailLevel={detailLevel}
             fitRequest={fitRequest}
             consumePendingFit={consumePendingFit}
             onNodeClick={(id, cx, cy) => {
@@ -267,6 +312,27 @@ export function App() {
             isValidConnection={isValidConnection}
             onDropInsert={onDropInsert}
           />
+          <div className="float-controls">
+            <span className="detail-switch" title="How much detail the diagram shows">
+              {DETAIL_LEVELS.map((l) => (
+                <button
+                  key={l}
+                  className={l === detailLevel ? 'active' : ''}
+                  onClick={() => setDetailLevel(l)}
+                >
+                  {l}
+                </button>
+              ))}
+            </span>
+            <button
+              className={legendOpen ? 'active' : ''}
+              title="Explain the diagram notation"
+              onClick={() => setLegendOpen((v) => !v)}
+            >
+              legend
+            </button>
+          </div>
+          {legendOpen && <Legend />}
           {popover && model && (
             <EditPopover
               target={popover.target}
