@@ -344,8 +344,6 @@ export function App() {
         example={example}
         onExample={loadExample}
         onFit={() => setFitRequest((n) => n + 1)}
-        showUnitRates={showUnitRates}
-        onToggleUnitRates={() => setShowUnitRates((v) => !v)}
         showSchedule={showSchedule}
         onToggleSchedule={() => setShowSchedule((v) => !v)}
         onAddActor={onAddActor}
@@ -396,13 +394,24 @@ export function App() {
             <span className="detail-switch" title="Toggle each annotation on the diagram">
               <span className="switch-title">show</span>
               {FLAG_LABELS.map(([key, label]) => (
-                <button
-                  key={key}
-                  className={showFlags[key] ? 'active' : ''}
-                  onClick={() => setShowFlags((f) => ({ ...f, [key]: !f[key] }))}
-                >
-                  {label}
-                </button>
+                <span key={key} className="switch-group">
+                  <button
+                    className={showFlags[key] ? 'active' : ''}
+                    onClick={() => setShowFlags((f) => ({ ...f, [key]: !f[key] }))}
+                  >
+                    {label}
+                  </button>
+                  {key === 'rates' && (
+                    <button
+                      className={`sub ${showUnitRates ? 'active' : ''}`}
+                      disabled={!showFlags.rates}
+                      title="Also show rates equal to 1"
+                      onClick={() => setShowUnitRates((v) => !v)}
+                    >
+                      rates equal to 1
+                    </button>
+                  )}
+                </span>
               ))}
             </span>
             <button

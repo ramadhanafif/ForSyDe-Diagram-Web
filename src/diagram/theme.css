@@ -492,6 +492,22 @@ body {
   font-weight: 600;
 }
 
+.float-controls .switch-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.float-controls button.sub {
+  padding-left: 24px;
+  font-size: 10px;
+}
+
+.float-controls button:disabled {
+  color: var(--fg-dim);
+  opacity: 0.5;
+  cursor: default;
+}
+
 .float-controls button:hover {
   color: var(--accent);
 }

@@ -4,8 +4,6 @@ export interface ToolbarProps {
   example: string;
   onExample(name: string): void;
   onFit(): void;
-  showUnitRates: boolean;
-  onToggleUnitRates(): void;
   showSchedule: boolean;
   onToggleSchedule(): void;
   onAddActor(): void;
@@ -31,13 +29,6 @@ export function Toolbar(p: ToolbarProps) {
           ))}
         </select>
         <button onClick={p.onFit}>Fit</button>
-        <button
-          className={p.showUnitRates ? 'active' : ''}
-          title="Also show rates equal to 1"
-          onClick={p.onToggleUnitRates}
-        >
-          All rates
-        </button>
         <button
           className={p.showSchedule ? 'active' : ''}
           title="Show or hide the schedule results: firing order, repetitions and buffer sizes"
