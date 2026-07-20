@@ -101,11 +101,11 @@ function Legend() {
         <span>system input or output</span>
       </div>
       <div className="legend-row">
-        <span className="legend-glyph">2</span>
+        <span className="legend-glyph legend-rate">2</span>
         <span>rate at an edge end: tokens produced or consumed per firing</span>
       </div>
       <div className="legend-row">
-        <span className="legend-glyph">&middot;4</span>
+        <span className="legend-glyph legend-buffer">buf 4</span>
         <span>buffer: maximum tokens held on the signal</span>
       </div>
       <div className="legend-row">

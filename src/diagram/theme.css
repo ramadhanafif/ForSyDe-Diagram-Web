@@ -16,6 +16,8 @@
   --delay-stroke-modern: #e0c36b;
   --io-fill-modern: #eef1f4;
   --shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+  --rate-fg: #0f766e;
+  --buffer-fg: #7c3aed;
 }
 
 [data-theme='dark'] {
@@ -36,6 +38,8 @@
   --delay-stroke-modern: #7a6a35;
   --io-fill-modern: #21262d;
   --shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  --rate-fg: #5eead4;
+  --buffer-fg: #c4b5fd;
 }
 
 * {
@@ -379,9 +383,33 @@ body {
   font-weight: 500;
 }
 
+/* number species are color coded in the modern style, matching the legend */
 .diagram-modern .rate-label {
   font-size: 10px;
-  fill: var(--fg-dim);
+  fill: var(--rate-fg);
+  font-weight: 600;
+}
+
+.diagram-modern .buffer-label {
+  fill: var(--buffer-fg);
+  font-weight: 600;
+}
+
+.diagram-modern .stack-rates {
+  color: var(--rate-fg);
+}
+
+/* buffer marker: terse dot in lecture style, verbose "buf n" in modern */
+.buffer-verbose {
+  display: none;
+}
+
+.diagram-modern .buffer-verbose {
+  display: inline;
+}
+
+.diagram-modern .buffer-dot {
+  display: none;
 }
 
 .diagram-modern .arrow-head {
@@ -582,6 +610,23 @@ body {
 .legend-badge {
   color: var(--accent);
   font-weight: 700;
+}
+
+.legend-rate {
+  color: var(--rate-fg);
+  font-weight: 600;
+}
+
+.legend-buffer {
+  color: var(--buffer-fg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* lecture style keeps the terse black notation, so the legend follows */
+.diagram-lecture .legend-rate,
+.diagram-lecture .legend-buffer {
+  color: var(--fg);
 }
 
 /* ------------------------------------------------------------------ */

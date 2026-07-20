@@ -47,7 +47,14 @@ function CircleNode({ data }: NodeProps<FlowNode>) {
       </svg>
       <div className="process-name">
         <MathLabel name={meta.label} />
-        {meta.badge && <span className="node-badge">{meta.badge}</span>}
+        {meta.badge && (
+          <span
+            className="node-badge"
+            title={`repetitions: ${meta.label} fires ${meta.badge.slice(1)} time(s) in one schedule iteration`}
+          >
+            {meta.badge}
+          </span>
+        )}
       </div>
       <div className="stack">
         {stack.map((line, i) => {
@@ -55,8 +62,15 @@ function CircleNode({ data }: NodeProps<FlowNode>) {
             meta.kind === 'delay'
               ? ['stack-ctor', 'stack-tokens']
               : ['stack-ctor', 'stack-rates', 'stack-fn'];
+          const cls = kinds[i] ?? 'stack-line';
+          const titles: Record<string, string> = {
+            'stack-ctor': 'the process constructor',
+            'stack-rates': 'input rates / output rates: tokens consumed and produced per firing',
+            'stack-fn': 'the Haskell function this actor applies',
+            'stack-tokens': 'initial tokens on the delayed signal',
+          };
           return (
-            <div key={i} className={`stack-line ${kinds[i] ?? 'stack-line'}`}>
+            <div key={i} className={`stack-line ${cls}`} title={titles[cls]}>
               {line}
             </div>
           );
