@@ -64,11 +64,13 @@ export function elaborate(mod: HsModule): {
     procByName.set(p.name, p);
     procSpans.set(p.name, {
       specBinding: spec.span,
+      name: spec.name.span,
       inRates: spec.body.form === 'actor' ? spec.body.inRates.map((r) => r.span) : [],
       outRates: spec.body.form === 'actor' ? spec.body.outRates.map((r) => r.span) : [],
       fnName: spec.body.form === 'actor' ? spec.body.fn.span : undefined,
       tokens: spec.body.form === 'delay' ? spec.body.tokensSpan : undefined,
       systemBindings: [],
+      bindingProcs: [],
     });
   }
 
@@ -100,7 +102,9 @@ export function elaborate(mod: HsModule): {
       });
       continue;
     }
-    procSpans.get(p.name)?.systemBindings.push(b.span);
+    const ps = procSpans.get(p.name);
+    ps?.systemBindings.push(b.span);
+    ps?.bindingProcs.push(b.proc.span);
     if (usedProcs.has(p.name)) {
       diags.push({
         severity: 'error',
@@ -150,9 +154,7 @@ export function elaborate(mod: HsModule): {
   // pass 2: wire signals
   const signals: IRSignal[] = [];
   const consumed = new Map<string, Span>();
-  const resolveSource = (
-    arg: Ident,
-  ): { name: string; rate: number } | null => {
+  const resolveSource = (arg: Ident): { name: string; rate: number } | null => {
     if (inputSet.has(arg.name)) return { name: arg.name, rate: 1 };
     const prod = producers.get(arg.name);
     if (!prod) {
@@ -188,6 +190,7 @@ export function elaborate(mod: HsModule): {
         name: arg.name,
         source,
         target: { name: p.name, rate: inRate(p, idx) },
+        targetSpan: arg.span,
       });
     });
   }
@@ -199,6 +202,7 @@ export function elaborate(mod: HsModule): {
       name: out.name,
       source,
       target: { name: out.name, rate: 1 },
+      targetSpan: out.span,
     });
   }
 
@@ -207,9 +211,7 @@ export function elaborate(mod: HsModule): {
   }
 
   const functions = [
-    ...new Set(
-      processes.flatMap((p) => (isDelay(p) || p.function === 'NULL' ? [] : [p.function])),
-    ),
+    ...new Set(processes.flatMap((p) => (isDelay(p) || p.function === 'NULL' ? [] : [p.function]))),
   ].map((name) => ({ name }));
 
   const spans: SpanIndex = {

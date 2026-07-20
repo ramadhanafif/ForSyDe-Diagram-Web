@@ -1,5 +1,5 @@
 import type { ElkExtendedEdge, ElkNode } from 'elkjs/lib/elk-api';
-import type { IRSystem } from '../core/ir';
+import type { IRSignal, IRSystem } from '../core/ir';
 import { isDelay } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
 
@@ -18,6 +18,8 @@ export interface EdgeMeta {
   sourceRate: number;
   targetRate: number;
   buffer?: number;
+  /** The IR signal this edge renders (diagram-driven editing needs its spans). */
+  sig: IRSignal;
 }
 
 const CHAR_W = 7.5;
@@ -97,6 +99,7 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): ElkNo
       sourceRate: s.source.rate,
       targetRate: s.target.rate,
       buffer: bufferFor(s.name),
+      sig: s,
     });
     edges.push({
       id,

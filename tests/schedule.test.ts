@@ -23,7 +23,12 @@ function delay(name: string, tokens: number[]): IRProcess {
   return { type: 'Delay', name, tokens };
 }
 function sig(name: string, src: string, prodRate: number, dst: string, consRate: number): IRSignal {
-  return { name, source: { name: src, rate: prodRate }, target: { name: dst, rate: consRate } };
+  return {
+    name,
+    source: { name: src, rate: prodRate },
+    target: { name: dst, rate: consRate },
+    targetSpan: span,
+  };
 }
 function system(
   inputs: string[],
@@ -183,6 +188,7 @@ describe('SDF scheduling golden tests (SDFScheduleSpec.hs)', () => {
       ],
     );
     const r = computeScheduleAndBuffers(ir);
+    // prettier-ignore
     expect(r.ok && r.schedule).toEqual([
       'd', 'c', 'a', 'a', 'c', 'a', 'a', 'b', 'c', 'a', 'a', 'c', 'a', 'a', 'b',
     ]);
@@ -217,11 +223,7 @@ describe('SDF scheduling golden tests (SDFScheduleSpec.hs)', () => {
       ['in'],
       ['out'],
       [actor('a', 'Actor22')],
-      [
-        sig('s_in', 'in', 1, 'a', 1),
-        sig('s1', 'a', 2, 'a', 3),
-        sig('s_out', 'a', 1, 'out', 1),
-      ],
+      [sig('s_in', 'in', 1, 'a', 1), sig('s1', 'a', 2, 'a', 3), sig('s_out', 'a', 1, 'out', 1)],
     );
     const r = computeScheduleAndBuffers(ir);
     expect(!r.ok && r.kind).toBe('invalid-self-loop');

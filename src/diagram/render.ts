@@ -53,12 +53,14 @@ export function render(root: SVGGElement, graph: ElkNode, opts: RenderOptions): 
   root.appendChild(
     el('rect', { x: -16, y: -16, width: w + 32, height: h + 32, class: 'system-boundary' }),
   );
-  root.appendChild(text('System', { x: w / 2, y: -26, class: 'system-label', 'text-anchor': 'middle' }));
+  root.appendChild(
+    text('System', { x: w / 2, y: -26, class: 'system-label', 'text-anchor': 'middle' }),
+  );
 
   for (const edge of graph.edges ?? []) {
     const m = edgeMeta.get(edge.id);
     const g = el('g', { class: 'edge' });
-    g.setAttribute('data-id', m?.signal ?? edge.id);
+    g.setAttribute('data-id', edge.id);
     const section = (
       edge as {
         sections?: {
@@ -71,6 +73,8 @@ export function render(root: SVGGElement, graph: ElkNode, opts: RenderOptions): 
     if (!section) continue;
     const pts = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint];
     const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    // fat invisible twin of the visible path so thin edges are clickable
+    g.appendChild(el('path', { d, class: 'edge-hit' }));
     g.appendChild(el('path', { d, class: 'edge-line', 'marker-end': 'url(#arrow)' }));
 
     if (m) {
@@ -78,7 +82,9 @@ export function render(root: SVGGElement, graph: ElkNode, opts: RenderOptions): 
       const end = pts[pts.length - 1]!;
       // production rate at the source end, consumption rate at the sink end
       if (m.sourceRate !== 1 || opts.showUnitRates) {
-        g.appendChild(text(String(m.sourceRate), { x: start.x + 5, y: start.y - 4, class: 'rate-label' }));
+        g.appendChild(
+          text(String(m.sourceRate), { x: start.x + 5, y: start.y - 4, class: 'rate-label' }),
+        );
       }
       if (m.targetRate !== 1 || opts.showUnitRates) {
         g.appendChild(
@@ -91,9 +97,10 @@ export function render(root: SVGGElement, graph: ElkNode, opts: RenderOptions): 
         );
       }
       // signal name (and buffer size when scheduled) near the middle
-      const mid = pts.length === 2
-        ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
-        : pts[Math.floor(pts.length / 2)]!;
+      const mid =
+        pts.length === 2
+          ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+          : pts[Math.floor(pts.length / 2)]!;
       const label = mathLabel(m.signal, {
         x: mid.x,
         y: mid.y - 6,
@@ -123,13 +130,17 @@ export function render(root: SVGGElement, graph: ElkNode, opts: RenderOptions): 
     const h = child.height ?? 0;
 
     if (m.kind === 'io') {
-      g.appendChild(mathLabel(m.label, { x: w / 2, y: h / 2 + 4, class: 'io-label', 'text-anchor': 'middle' }));
+      g.appendChild(
+        mathLabel(m.label, { x: w / 2, y: h / 2 + 4, class: 'io-label', 'text-anchor': 'middle' }),
+      );
     } else {
       g.appendChild(
         el('circle', { cx: w / 2, cy: h / 2, r: Math.min(w, h) / 2, class: 'node-shape' }),
       );
       // process name outside, above the circle
-      g.appendChild(mathLabel(m.label, { x: w / 2, y: -6, class: 'process-name', 'text-anchor': 'middle' }));
+      g.appendChild(
+        mathLabel(m.label, { x: w / 2, y: -6, class: 'process-name', 'text-anchor': 'middle' }),
+      );
       if (m.badge) {
         g.appendChild(text(m.badge, { x: w / 2 + 24, y: -6, class: 'node-badge' }));
       }

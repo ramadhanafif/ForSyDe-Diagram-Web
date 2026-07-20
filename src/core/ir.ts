@@ -25,16 +25,22 @@ export interface IRSignal {
   name: string;
   source: IREndpoint;
   target: IREndpoint;
+  /** Span of the identifier at the consumption site (binding arg or system output). */
+  targetSpan: Span;
 }
 
 /** Source location index enabling phase-2 text patches. */
 export interface ProcessSpans {
   specBinding: Span;
+  /** The process name identifier in its top-level spec. */
+  name: Span;
   inRates: Span[];
   outRates: Span[];
   fnName?: Span;
   tokens?: Span;
   systemBindings: Span[];
+  /** The process name identifier inside each system binding. */
+  bindingProcs: Span[];
 }
 
 export interface SpanIndex {

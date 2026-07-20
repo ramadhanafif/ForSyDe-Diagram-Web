@@ -1,4 +1,5 @@
 import { createShell } from './app/shell';
+import { setupEditUi, type ModelState } from './app/editui';
 import { examples } from './app/examples';
 import { runPipeline } from './app/pipeline';
 import { createEditor } from './editor/editor';
@@ -23,6 +24,7 @@ const viewport = setupZoom(svg, viewportGroup);
 
 let showUnitRates = false;
 let lastGraph: ElkNode | null = null;
+let lastModel: ModelState | null = null;
 let firstRender = true;
 
 function draw(): void {
@@ -59,6 +61,11 @@ ratesBtn.addEventListener('click', () => {
   draw();
 });
 
+const addActorBtn = document.createElement('button');
+addActorBtn.textContent = 'Add actor';
+addActorBtn.title = 'Add an actor fed by a new system input';
+addActorBtn.addEventListener('click', () => editUi.addActor());
+
 const themeBtn = document.createElement('button');
 themeBtn.textContent = 'Theme';
 const applyTheme = (t: string) => document.documentElement.setAttribute('data-theme', t);
@@ -72,7 +79,7 @@ themeBtn.addEventListener('click', () => {
   applyTheme(theme);
 });
 
-shell.toolbar.append(select, fitBtn, ratesBtn, themeBtn);
+shell.toolbar.append(select, fitBtn, ratesBtn, addActorBtn, themeBtn);
 
 // --- pipeline loop -----------------------------------------------------
 let debounce: ReturnType<typeof setTimeout> | undefined;
@@ -85,6 +92,7 @@ async function update(source: string): Promise<void> {
   const errors = result.diagnostics.filter((d) => d.severity === 'error').length;
   if (result.graph) {
     lastGraph = result.graph;
+    lastModel = result.ir ? { ir: result.ir, graph: result.graph, source } : null;
     svg.classList.remove('stale');
     statusChip.hidden = true;
     draw();
@@ -109,6 +117,13 @@ async function update(source: string): Promise<void> {
 const editor = createEditor(shell.editorPane, (source) => {
   clearTimeout(debounce);
   debounce = setTimeout(() => void update(source), 250);
+});
+
+const editUi = setupEditUi({
+  svg,
+  pane: shell.diagramPane,
+  view: editor.view,
+  current: () => lastModel,
 });
 
 const initial = examples.find((e) => e.name === 'SDF_example_002') ?? examples[0];

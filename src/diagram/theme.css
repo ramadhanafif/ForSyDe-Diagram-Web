@@ -200,6 +200,25 @@ svg.diagram.stale {
   stroke-width: 1;
 }
 
+.edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+}
+
+.edge {
+  cursor: pointer;
+}
+
+.edge:hover .edge-line {
+  stroke: var(--accent);
+}
+
+.node.actor,
+.node.delay {
+  cursor: pointer;
+}
+
 .arrow-head {
   fill: var(--fg);
 }
@@ -236,4 +255,71 @@ svg.diagram.stale {
   bottom: 12px;
   background: var(--error);
   color: #fff;
+}
+
+/* diagram edit popover */
+.popover[hidden] {
+  display: none;
+}
+
+.popover {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.popover .pop-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.popover .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popover .row > span {
+  min-width: 60px;
+  color: var(--fg-dim);
+}
+
+.popover input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.popover button {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.popover button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.popover .err {
+  color: var(--error);
 }

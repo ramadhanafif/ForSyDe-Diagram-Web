@@ -22,6 +22,24 @@ npm run build    # production bundle (dist/)
 
 Deploys to GitHub Pages from `main` via `.github/workflows/deploy.yml`.
 
+## Editing from the diagram
+
+The diagram is clickable and every edit is applied as a plain text change to
+the source, which stays the single source of truth:
+
+- click an edge to insert an actor or delay in the middle of it, or to rename
+  the signal
+- click a process to change its name, rates, function or delay tokens, jump
+  to the function definition, or delete it (1-in-1-out processes; the
+  consumer is rewired to the producer)
+- the Add actor toolbar button adds an actor fed by a new system input, wired
+  to a new system output
+- new actors get a runnable function stub appended to the file, for example
+  `f_5 :: [Int] -> [Int]` with `f_5 _ = replicate 1 0`
+
+Undo works through the editor history as usual, since diagram edits are
+ordinary text edits.
+
 ## Supported model subset
 
 The playground parses the same restricted ForSyDe Shallow subset as the reference
