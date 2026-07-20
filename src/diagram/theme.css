@@ -422,6 +422,59 @@ body {
   display: none;
 }
 
+/* schedule toggle hides all schedule-derived annotations */
+.schedule-off .node-badge,
+.schedule-off .buffer-label {
+  display: none;
+}
+
+.schedule-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  font-size: 11px;
+  max-height: 40%;
+  overflow: auto;
+  z-index: 4;
+}
+
+.schedule-strip {
+  color: var(--fg-dim);
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.schedule-tables {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.schedule-tables table {
+  border-collapse: collapse;
+}
+
+.schedule-tables th {
+  text-align: left;
+  color: var(--fg-dim);
+  font-weight: 600;
+  padding: 1px 12px 1px 0;
+}
+
+.schedule-tables td {
+  padding: 1px 12px 1px 0;
+  font-family: ui-monospace, monospace;
+}
+
 /* overlays */
 .status-chip,
 .sched-banner {

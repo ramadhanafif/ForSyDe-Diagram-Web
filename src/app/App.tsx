@@ -1,11 +1,58 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { addInput, addSourceActor } from '../core/edits';
+import type { ScheduleResult } from '../core/schedule';
 import { DiagramPane } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
 import { examples } from './examples';
 import { Toolbar } from './Toolbar';
 import { usePipeline } from './usePipeline';
+
+type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
+
+function SchedulePanel({ sched }: { sched: ScheduleOk }) {
+  return (
+    <div className="schedule-panel">
+      <div className="schedule-strip" title="One iteration of the static schedule">
+        schedule: {sched.schedule.join(' ')}
+      </div>
+      <div className="schedule-tables">
+        <table>
+          <thead>
+            <tr>
+              <th>actor</th>
+              <th>reps</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...sched.repetitions].map(([name, q]) => (
+              <tr key={name}>
+                <td>{name}</td>
+                <td>{q}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table>
+          <thead>
+            <tr>
+              <th>signal</th>
+              <th>buffer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sched.buffers.map(([name, size]) => (
+              <tr key={name}>
+                <td>{name}</td>
+                <td>{size}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 const initialAppTheme = (): string =>
   localStorage.getItem('theme') ??
@@ -33,6 +80,7 @@ export function App() {
     () => (examples.find((e) => e.name === 'SDF_example_002') ?? examples[0])?.name ?? '',
   );
   const [showUnitRates, setShowUnitRates] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(true);
   const [appTheme, setAppTheme] = useState(initialAppTheme);
   const [diagramTheme, setDiagramTheme] = useState(initialDiagramTheme);
   const [fitRequest, setFitRequest] = useState(0);
@@ -138,6 +186,8 @@ export function App() {
         onFit={() => setFitRequest((n) => n + 1)}
         showUnitRates={showUnitRates}
         onToggleUnitRates={() => setShowUnitRates((v) => !v)}
+        showSchedule={showSchedule}
+        onToggleSchedule={() => setShowSchedule((v) => !v)}
         onAddActor={onAddActor}
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
@@ -157,7 +207,10 @@ export function App() {
           aria-orientation="vertical"
           onPointerDown={onSplitterDown}
         />
-        <section className={`pane diagram-pane diagram-${diagramTheme}`} ref={paneRef}>
+        <section
+          className={`pane diagram-pane diagram-${diagramTheme}${showSchedule ? '' : ' schedule-off'}`}
+          ref={paneRef}
+        >
           <DiagramPane
             dg={model?.dg ?? null}
             showUnitRates={showUnitRates}
@@ -191,6 +244,7 @@ export function App() {
             </div>
           )}
           {schedError && <div className="sched-banner">Not schedulable: {schedError}</div>}
+          {showSchedule && pipe.schedule?.ok && <SchedulePanel sched={pipe.schedule} />}
         </section>
       </main>
     </div>

@@ -143,7 +143,12 @@ function Diagram(props: Props) {
           </div>
         </ViewportPortal>
       )}
-      <MiniMap pannable zoomable nodeClassName={(n) => `mm-${n.type ?? 'io'}`} />
+      <MiniMap
+        position="top-right"
+        pannable
+        zoomable
+        nodeClassName={(n) => `mm-${n.type ?? 'io'}`}
+      />
     </ReactFlow>
   );
 }

@@ -6,6 +6,8 @@ export interface ToolbarProps {
   onFit(): void;
   showUnitRates: boolean;
   onToggleUnitRates(): void;
+  showSchedule: boolean;
+  onToggleSchedule(): void;
   onAddActor(): void;
   diagramTheme: 'modern' | 'lecture';
   onToggleDiagramTheme(): void;
@@ -35,6 +37,13 @@ export function Toolbar(p: ToolbarProps) {
           onClick={p.onToggleUnitRates}
         >
           All rates
+        </button>
+        <button
+          className={p.showSchedule ? 'active' : ''}
+          title="Show or hide the schedule results: firing order, repetitions and buffer sizes"
+          onClick={p.onToggleSchedule}
+        >
+          Schedule
         </button>
         <button title="Add an actor fed by a new system input" onClick={p.onAddActor}>
           Add actor
