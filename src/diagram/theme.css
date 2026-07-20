@@ -394,6 +394,68 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
+/* progressive disclosure (modern style only): semantic zoom bands.
+   overview: names only; normal: names + functions + signals;
+   detail: everything. Hover or selection always reveals full detail. */
+
+.diagram-modern .detail-overview .stack,
+.diagram-modern .detail-overview .node-badge,
+.diagram-modern .detail-overview .rate-label,
+.diagram-modern .detail-overview .signal-label {
+  display: none;
+}
+
+/* overview: process name moves inside the circle */
+.diagram-modern .detail-overview .process-name {
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diagram-modern .detail-normal .stack > :first-child,
+.diagram-modern .detail-normal .stack-rates,
+.diagram-modern .detail-normal .rate-label,
+.diagram-modern .detail-normal .buffer-label {
+  display: none;
+}
+
+/* hover or selection reveals everything, in any band */
+.diagram-modern .fsd-node:hover .stack,
+.diagram-modern .react-flow__node.selected .stack {
+  display: flex;
+}
+
+.diagram-modern .fsd-node:hover .stack > :first-child,
+.diagram-modern .react-flow__node.selected .stack > :first-child,
+.diagram-modern .fsd-node:hover .stack-rates,
+.diagram-modern .react-flow__node.selected .stack-rates {
+  display: block;
+}
+
+.diagram-modern .detail-overview .fsd-node:hover .process-name,
+.diagram-modern .detail-overview .react-flow__node.selected .process-name {
+  top: -24px;
+  bottom: auto;
+  display: block;
+}
+
+.diagram-modern .fsd-node:hover .node-badge,
+.diagram-modern .react-flow__node.selected .node-badge {
+  display: inline;
+}
+
+.diagram-modern .react-flow__edge:hover .signal-label,
+.diagram-modern .react-flow__edge.selected .signal-label,
+.diagram-modern .react-flow__edge:hover .rate-label,
+.diagram-modern .react-flow__edge.selected .rate-label,
+.diagram-modern .react-flow__edge:hover .buffer-label,
+.diagram-modern .react-flow__edge.selected .buffer-label {
+  display: inline;
+}
+
+/* ------------------------------------------------------------------ */
 /* lecture theme: the ForSyDe lecture-notes / TikZ figure style        */
 
 .diagram-lecture .react-flow {
@@ -444,10 +506,11 @@ body {
   display: none;
 }
 
-/* schedule toggle hides all schedule-derived annotations */
+/* schedule toggle hides all schedule-derived annotations; hard off switch
+   that must also beat the hover-reveal rules below */
 .schedule-off .node-badge,
 .schedule-off .buffer-label {
-  display: none;
+  display: none !important;
 }
 
 .schedule-panel {
@@ -473,6 +536,32 @@ body {
   font-family: ui-monospace, monospace;
   white-space: nowrap;
   overflow-x: auto;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.schedule-chip {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--fg-dim);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  z-index: 4;
+}
+
+.schedule-chip:hover,
+.schedule-strip:hover {
+  color: var(--accent);
 }
 
 .schedule-tables {

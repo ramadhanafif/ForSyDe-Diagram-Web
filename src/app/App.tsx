@@ -10,12 +10,32 @@ import { usePipeline } from './usePipeline';
 
 type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
 
-function SchedulePanel({ sched }: { sched: ScheduleOk }) {
+function SchedulePanel({
+  sched,
+  open,
+  onToggle,
+}: {
+  sched: ScheduleOk;
+  open: boolean;
+  onToggle(): void;
+}) {
+  if (!open) {
+    const maxBuffer = Math.max(0, ...sched.buffers.map(([, size]) => size));
+    return (
+      <button className="schedule-chip" title="Show the full schedule" onClick={onToggle}>
+        schedule: {sched.schedule.length} firings, max buffer {maxBuffer}
+      </button>
+    );
+  }
   return (
     <div className="schedule-panel">
-      <div className="schedule-strip" title="One iteration of the static schedule">
+      <button
+        className="schedule-strip"
+        title="One iteration of the static schedule; click to collapse"
+        onClick={onToggle}
+      >
         schedule: {sched.schedule.join(' ')}
-      </div>
+      </button>
       <div className="schedule-tables">
         <table>
           <thead>
@@ -81,6 +101,7 @@ export function App() {
   );
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [appTheme, setAppTheme] = useState(initialAppTheme);
   const [diagramTheme, setDiagramTheme] = useState(initialDiagramTheme);
   const [fitRequest, setFitRequest] = useState(0);
@@ -262,7 +283,13 @@ export function App() {
             </div>
           )}
           {schedError && <div className="sched-banner">Not schedulable: {schedError}</div>}
-          {showSchedule && pipe.schedule?.ok && <SchedulePanel sched={pipe.schedule} />}
+          {showSchedule && pipe.schedule?.ok && (
+            <SchedulePanel
+              sched={pipe.schedule}
+              open={scheduleOpen}
+              onToggle={() => setScheduleOpen((v) => !v)}
+            />
+          )}
         </section>
       </main>
     </div>
