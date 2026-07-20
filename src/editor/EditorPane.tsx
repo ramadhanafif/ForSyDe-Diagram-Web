@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { StreamLanguage } from '@codemirror/language';
-import { linter, lintGutter, type Diagnostic as CmDiagnostic } from '@codemirror/lint';
+import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { haskell } from '@codemirror/legacy-modes/mode/haskell';
@@ -32,28 +32,14 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const diagsRef = useRef(diagnostics);
 
   useEffect(() => {
-    const cmLinter = linter(
-      (v): CmDiagnostic[] => {
-        const len = v.state.doc.length;
-        return diagsRef.current.map((d) => ({
-          from: Math.min(d.span.from, len),
-          to: Math.min(Math.max(d.span.to, d.span.from + 1), len),
-          severity: d.severity,
-          message: d.message,
-        }));
-      },
-      { delay: 0 },
-    );
     const extensions = [
       lineNumbers(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       StreamLanguage.define(haskell),
       lintGutter(),
-      cmLinter,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChangeRef.current(update.state.doc.toString());
       }),
@@ -68,10 +54,24 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
     return () => v.destroy();
   }, []);
 
-  // re-trigger the linter whenever diagnostics change
+  // push diagnostics into the editor as soon as the pipeline produces them;
+  // a pull-based linter() only refreshes on doc changes, which made squiggles
+  // lag one keystroke behind
   useEffect(() => {
-    diagsRef.current = diagnostics;
-    view.current?.dispatch({});
+    const v = view.current;
+    if (!v) return;
+    const len = v.state.doc.length;
+    v.dispatch(
+      setDiagnostics(
+        v.state,
+        diagnostics.map((d) => ({
+          from: Math.min(d.span.from, len),
+          to: Math.min(Math.max(d.span.to, d.span.from + 1), len),
+          severity: d.severity,
+          message: d.message,
+        })),
+      ),
+    );
   }, [diagnostics]);
 
   useImperativeHandle(ref, () => ({

@@ -758,6 +758,12 @@ body {
   font-size: 12px;
 }
 
+.popover form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .popover .pop-title {
   font-weight: 600;
   margin-bottom: 2px;
@@ -802,4 +808,58 @@ body {
 
 .popover .err {
   color: var(--error);
+}
+
+/* freshly inserted nodes pulse briefly */
+@keyframes fsd-pulse {
+  0%,
+  100% {
+    stroke-width: 1.25;
+  }
+  50% {
+    stroke: var(--accent);
+    stroke-width: 3;
+  }
+}
+
+.react-flow__node.just-added .node-shape {
+  animation: fsd-pulse 0.6s ease-in-out 3;
+}
+
+/* transient explanation for refused gestures */
+.notice-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  max-width: 70%;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 12px;
+  z-index: 6;
+}
+
+/* dark-mode polish for the editor chrome */
+[data-theme='dark'] .cm-editor .cm-gutters {
+  background: var(--bg-panel);
+  color: var(--fg-dim);
+  border-right: 1px solid var(--border);
+}
+
+[data-theme='dark'] .cm-editor .cm-activeLine {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='dark'] .cm-editor .cm-activeLineGutter {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme='dark'] .cm-editor .cm-cursor {
+  border-left-color: var(--fg);
+}
+
+[data-theme='dark'] .cm-editor .cm-selectionBackground {
+  background: rgba(68, 147, 248, 0.25);
 }

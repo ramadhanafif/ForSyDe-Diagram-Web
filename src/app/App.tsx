@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { addInput, addSourceActor, insertOnEdge } from '../core/edits';
+import { addInput, addInputError, addSourceActor, insertOnEdge } from '../core/edits';
+import type { IRSystem } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
 import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
@@ -119,6 +120,23 @@ function Legend() {
   );
 }
 
+/** Number of weakly connected components over processes and io nodes. */
+function componentCount(ir: IRSystem): number {
+  const nodes = [...ir.processes.map((p) => p.name), ...ir.inputs, ...ir.outputs];
+  const parent = new Map(nodes.map((n) => [n, n]));
+  const find = (n: string): string => {
+    let r = n;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    return r;
+  };
+  for (const s of ir.signals) {
+    const a = find(s.source.name);
+    const b = find(s.target.name);
+    if (a !== b) parent.set(a, b);
+  }
+  return new Set(nodes.map(find)).size;
+}
+
 const initialAppTheme = (): string =>
   localStorage.getItem('theme') ??
   (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -156,9 +174,42 @@ export function App() {
   });
   const [legendOpen, setLegendOpen] = useState(false);
   useEffect(() => localStorage.setItem('showFlags', JSON.stringify(showFlags)), [showFlags]);
+
+  // transient toast for refused gestures
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(''), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const [appTheme, setAppTheme] = useState(initialAppTheme);
   const [diagramTheme, setDiagramTheme] = useState(initialDiagramTheme);
   const [fitRequest, setFitRequest] = useState(0);
+
+  // when processes appear or disappear, pulse the new ones and re-fit;
+  // derived-during-render pattern so no setState-in-effect
+  const [flash, setFlash] = useState<string[]>([]);
+  const [prevModel, setPrevModel] = useState<typeof model>(null);
+  if (model !== prevModel) {
+    setPrevModel(model);
+    if (model && prevModel) {
+      const names = model.ir.processes.map((p) => p.name);
+      const prev = prevModel.ir.processes.map((p) => p.name);
+      const added = names.filter((n) => !prev.includes(n));
+      if (added.length && names.length !== prev.length) {
+        setFlash(added);
+        setFitRequest((n) => n + 1);
+      } else if (names.length < prev.length) {
+        setFitRequest((n) => n + 1);
+      }
+    }
+  }
+  useEffect(() => {
+    if (!flash.length) return;
+    const t = setTimeout(() => setFlash([]), 1800);
+    return () => clearTimeout(t);
+  }, [flash]);
   const [popover, setPopover] = useState<{ target: PopoverTarget; x: number; y: number } | null>(
     null,
   );
@@ -268,7 +319,24 @@ export function App() {
     [model],
   );
 
-  const schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
+  const onConnectRefused = useCallback(
+    (sourceHandle: string, targetHandle: string) => {
+      if (!model) return;
+      const sig = handleSignal(sourceHandle);
+      const proc = targetHandle.split('.')[0];
+      if (!sig || !proc) return;
+      setNotice(addInputError(model.ir, proc, sig) ?? 'connection not possible here');
+    },
+    [model],
+  );
+
+  // the rank error on a disconnected graph teaches the wrong concept
+  let schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
+  if (schedError && pipe.schedule && !pipe.schedule.ok && pipe.schedule.kind === 'rank' && model) {
+    const parts = componentCount(model.ir);
+    if (parts > 1)
+      schedError = `the graph has ${parts} disconnected parts; every process must be connected to the rest of the system before a schedule exists`;
+  }
 
   return (
     <div className="app">
@@ -321,6 +389,8 @@ export function App() {
             onConnect={onConnect}
             isValidConnection={isValidConnection}
             onDropInsert={onDropInsert}
+            onConnectRefused={onConnectRefused}
+            flash={flash}
           />
           <div className="float-controls">
             <span className="detail-switch" title="Toggle each annotation on the diagram">
@@ -360,6 +430,7 @@ export function App() {
             </div>
           )}
           {schedError && <div className="sched-banner">Not schedulable: {schedError}</div>}
+          {notice && <div className="notice-toast">{notice}</div>}
           {showSchedule && pipe.schedule?.ok && (
             <SchedulePanel
               sched={pipe.schedule}

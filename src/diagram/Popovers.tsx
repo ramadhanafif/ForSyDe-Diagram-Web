@@ -75,7 +75,14 @@ export function EditPopover({ target, x, y, model, editorRef, onClose }: Props) 
   if (!body) return null;
 
   return (
-    <div className="popover" ref={ref} style={{ left: pos.x, top: pos.y }}>
+    <div
+      className="popover"
+      ref={ref}
+      style={{ left: pos.x, top: pos.y }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose();
+      }}
+    >
       {body}
       {error && <div className="err">{error}</div>}
     </div>
@@ -86,17 +93,28 @@ type Apply = (make: () => Splice[] | string) => void;
 
 function EdgeBody({ sig, model, apply }: { sig: IRSignal; model: ModelState; apply: Apply }) {
   const [name, setName] = useState(sig.name);
+  const applyRename = () =>
+    apply(
+      () => renameSignal(model.source, model.ir, sig.name, name.trim()) ?? 'name taken or invalid',
+    );
   return (
-    <>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        applyRename();
+      }}
+    >
       <div className="pop-title">signal {sig.name}</div>
       <label className="row">
         <span>insert</span>
         <button
+          type="button"
           onClick={() => apply(() => insertOnEdge(model.source, model.ir, sig, 'actor').splices)}
         >
           actor
         </button>
         <button
+          type="button"
           onClick={() => apply(() => insertOnEdge(model.source, model.ir, sig, 'delay').splices)}
         >
           delay
@@ -104,20 +122,15 @@ function EdgeBody({ sig, model, apply }: { sig: IRSignal; model: ModelState; app
       </label>
       <label className="row">
         <span>rename</span>
-        <input value={name} spellCheck={false} onChange={(e) => setName(e.target.value)} />
-        <button
-          onClick={() =>
-            apply(
-              () =>
-                renameSignal(model.source, model.ir, sig.name, name.trim()) ??
-                'name taken or invalid',
-            )
-          }
-        >
-          apply
-        </button>
+        <input
+          value={name}
+          autoFocus
+          spellCheck={false}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button type="submit">apply</button>
       </label>
-    </>
+    </form>
   );
 }
 
@@ -176,14 +189,30 @@ function NodeBody({
     return { splices: all };
   };
 
+  const applyAll = () =>
+    apply(() => {
+      const r = buildSplices();
+      return r.error ?? r.splices;
+    });
+
   return (
-    <>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        applyAll();
+      }}
+    >
       <div className="pop-title">
         {p.name} ({delay ? 'delaySDF' : `actor${p.type.slice(5)}SDF`})
       </div>
       <label className="row">
         <span>name</span>
-        <input value={name} spellCheck={false} onChange={(e) => setName(e.target.value)} />
+        <input
+          value={name}
+          autoFocus
+          spellCheck={false}
+          onChange={(e) => setName(e.target.value)}
+        />
       </label>
       {delay ? (
         <label className="row">
@@ -204,6 +233,7 @@ function NodeBody({
             <span>function</span>
             <input value={fn} spellCheck={false} onChange={(e) => setFn(e.target.value)} />
             <button
+              type="button"
               onClick={() => {
                 const editor = editorRef.current;
                 if (!editor) return;
@@ -221,17 +251,9 @@ function NodeBody({
       )}
       <label className="row">
         <span />
+        <button type="submit">apply</button>
         <button
-          onClick={() =>
-            apply(() => {
-              const r = buildSplices();
-              return r.error ?? r.splices;
-            })
-          }
-        >
-          apply
-        </button>
-        <button
+          type="button"
           onClick={() =>
             apply(
               () =>
@@ -243,6 +265,6 @@ function NodeBody({
           delete
         </button>
       </label>
-    </>
+    </form>
   );
 }

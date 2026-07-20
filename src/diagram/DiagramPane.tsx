@@ -22,6 +22,8 @@ export interface DiagramCallbacks {
   isValidConnection(sourceHandle: string, targetHandle: string): boolean;
   /** Palette chip dropped: on an edge (its id) or on empty canvas (null). */
   onDropInsert(kind: 'actor' | 'delay', edgeId: string | null): void;
+  /** A connection gesture ended on a handle but was refused. */
+  onConnectRefused(sourceHandle: string, targetHandle: string): void;
 }
 
 const DND_TYPE = 'application/forsyde-node';
@@ -58,6 +60,8 @@ interface Props extends DiagramCallbacks {
   showUnitRates: boolean;
   stale: boolean;
   showFlags: ShowFlags;
+  /** Node ids to pulse briefly (freshly inserted). */
+  flash: string[];
   /** Increment to request a fit-to-view (Fit button). */
   fitRequest: number;
   /** Polled after each graph update; returns true when a fit is pending (example load). */
@@ -75,7 +79,18 @@ function Diagram(props: Props) {
 
   // node positions are live (draggable); edges/labels derive from them below
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
-  useEffect(() => setNodes(computed.nodes), [computed, setNodes]);
+  const { flash } = props;
+  useEffect(
+    () =>
+      setNodes(
+        flash.length
+          ? computed.nodes.map((n) =>
+              flash.includes(n.id) ? { ...n, className: 'just-added' } : n,
+            )
+          : computed.nodes,
+      ),
+    [computed, setNodes, flash],
+  );
 
   // translate elk path endpoints by each node's drag delta so edges follow;
   // ponytail: only endpoints move, mid-bends reroute at the next re-layout
@@ -104,8 +119,11 @@ function Diagram(props: Props) {
 
   const handledFit = useRef(0);
   useEffect(() => {
+    // only consume the pending-fit flag once nodes exist, otherwise the
+    // first-mount run (empty graph) eats it and the initial fit never happens
+    if (!nodes.length) return;
     const pending = consumePendingFit();
-    if ((fitRequest !== handledFit.current || pending) && nodes.length) {
+    if (fitRequest !== handledFit.current || pending) {
       handledFit.current = fitRequest;
       void fitView({ padding: 0.08, maxZoom: 2, duration: 150 });
     }
@@ -138,6 +156,11 @@ function Diagram(props: Props) {
       onPaneClick={() => props.onPaneClick()}
       onConnect={(c: Connection) => {
         if (c.sourceHandle && c.targetHandle) props.onConnect(c.sourceHandle, c.targetHandle);
+      }}
+      onConnectEnd={(_ev, state) => {
+        if (state.toHandle && state.fromHandle && !state.isValid) {
+          props.onConnectRefused(state.fromHandle.id ?? '', state.toHandle.id ?? '');
+        }
       }}
       isValidConnection={(c) =>
         !!c.sourceHandle &&
@@ -211,6 +234,25 @@ export function DiagramPane(props: Props) {
         }
       }}
       onDragLeave={clearHover}
+      onKeyDown={(e) => {
+        // keyboard path into editing: Enter on a selected node or edge
+        if (e.key !== 'Enter') return;
+        const node = document.querySelector('.react-flow__node.selected');
+        if (node) {
+          const r = node.getBoundingClientRect();
+          props.onNodeClick(node.getAttribute('data-id') ?? '', r.x + r.width / 2, r.y + r.height);
+          return;
+        }
+        const edge = document.querySelector('.react-flow__edge.selected');
+        if (edge) {
+          const r = edge.getBoundingClientRect();
+          props.onEdgeClick(
+            edge.getAttribute('data-id') ?? '',
+            r.x + r.width / 2,
+            r.y + r.height / 2,
+          );
+        }
+      }}
       onDrop={(e) => {
         const kind = e.dataTransfer.getData(DND_TYPE);
         if (kind !== 'actor' && kind !== 'delay') return;

@@ -226,14 +226,8 @@ function convertIRSystem(
 // ---------------------------------------------------------------------------
 // Greedy scheduling + buffer simulation
 
-function greedySchedule(
-  actors: Actor[],
-  edges: Edge[],
-  reps: number[],
-): number[] | ScheduleResult {
-  const incoming = actors.map((a, _i) =>
-    edges.flatMap((e, ei) => (e.dst === a.name ? [ei] : [])),
-  );
+function greedySchedule(actors: Actor[], edges: Edge[], reps: number[]): number[] | ScheduleResult {
+  const incoming = actors.map((a, _i) => edges.flatMap((e, ei) => (e.dst === a.name ? [ei] : [])));
   const outgoing = actors.map((a) => edges.flatMap((e, ei) => (e.src === a.name ? [ei] : [])));
   const remaining = [...reps];
   const tokens = edges.map((e) => e.initTokens);
@@ -294,9 +288,7 @@ function simulateBufferUsage(
 function computeIOBufferSizes(
   ir: IRSystem,
   reps: Map<string, number>,
-):
-  | { ioBuffers: [string, number][]; aliases: [string, string][] }
-  | { error: ScheduleResult } {
+): { ioBuffers: [string, number][]; aliases: [string, string][] } | { error: ScheduleResult } {
   const procByName = new Map(ir.processes.map((p) => [p.name, p]));
   const ioBuffers: [string, number][] = [];
   const aliases: [string, string][] = [];

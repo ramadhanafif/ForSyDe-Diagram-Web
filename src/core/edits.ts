@@ -205,34 +205,46 @@ export function renameSignal(
  * ponytail: the actor's function is left untouched (bodies are opaque), so a
  * regenerated fixture would need a manual function-arity fix.
  */
+/** Why a drag-to-connect would be refused, in SDF terms; null when it is allowed. */
+export function addInputError(ir: IRSystem, procName: string, signalName: string): string | null {
+  const spans = ir.spans.processes.get(procName);
+  const p = ir.processes.find((q) => q.name === procName);
+  if (!p || !spans) return `'${procName}' is not a defined process`;
+  if (isDelay(p)) return 'delays always have exactly one input';
+  if (!spans.constructorSpan) return `'${procName}' has no actor constructor to extend`;
+  if (spans.etaParams > 0)
+    return `'${procName}' is written with explicit signal parameters; only point-free specs can gain inputs here`;
+  if (spans.systemBindings.length !== 1) return `'${procName}' is not instantiated in the system`;
+  if (p.inRates.length >= 4) return `'${procName}' already has 4 inputs, the actorNMSDF maximum`;
+  const isInput = ir.inputs.includes(signalName);
+  const produced = ir.signals.some((s) => s.name === signalName);
+  const signalOccurs = ir.spans.signals.has(signalName);
+  if (!isInput && !produced && !signalOccurs) return `'${signalName}' is not a known signal`;
+  const consumer = ir.signals.find(
+    (s) => s.name === signalName && ir.processes.some((q) => q.name === s.target.name),
+  );
+  if (consumer)
+    return `'${signalName}' already feeds '${consumer.target.name}'; an SDF signal has exactly one consumer, duplicate it with a split actor instead`;
+  const producer = ir.signals.find((s) => s.name === signalName)?.source.name;
+  if (producer === procName) return `'${procName}' cannot consume its own output directly`;
+  return null;
+}
+
 export function addInput(
   source: string,
   ir: IRSystem,
   procName: string,
   signalName: string,
 ): Splice[] | null {
-  const spans = ir.spans.processes.get(procName);
-  const p = ir.processes.find((q) => q.name === procName);
-  if (!spans?.constructorSpan || !p || isDelay(p)) return null;
-  if (spans.etaParams > 0 || spans.systemBindings.length !== 1) return null;
-  if (p.inRates.length >= 4) return null;
-  // the signal must exist and must not already be consumed by a process
-  const isInput = ir.inputs.includes(signalName);
-  const produced = ir.signals.some((s) => s.name === signalName);
-  const signalOccurs = ir.spans.signals.has(signalName);
-  if (!isInput && !produced && !signalOccurs) return null;
-  const consumedByProc = ir.signals.some(
-    (s) => s.name === signalName && ir.processes.some((q) => q.name === s.target.name),
-  );
-  if (consumedByProc) return null;
-  // no direct self-loop
-  const producer = ir.signals.find((s) => s.name === signalName)?.source.name;
-  if (producer === procName) return null;
+  if (addInputError(ir, procName, signalName) !== null) return null;
+  const spans = ir.spans.processes.get(procName)!;
+  const p = ir.processes.find((q) => q.name === procName)!;
+  if (isDelay(p)) return null;
 
   const nIn = p.inRates.length;
   const nOut = p.outRates.length;
   const splices: Splice[] = [
-    replaceSpan(spans.constructorSpan, `actor${nIn + 1}${nOut}SDF`),
+    replaceSpan(spans.constructorSpan!, `actor${nIn + 1}${nOut}SDF`),
     nIn === 1
       ? replaceSpan(spans.inRates[0]!, `(${p.inRates[0]}, 1)`)
       : { from: spans.inRates[nIn - 1]!.to, to: spans.inRates[nIn - 1]!.to, insert: ', 1' },
