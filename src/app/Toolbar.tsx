@@ -48,6 +48,22 @@ export function Toolbar(p: ToolbarProps) {
         <button title="Add an actor fed by a new system input" onClick={p.onAddActor}>
           Add actor
         </button>
+        <span className="palette" title="Drag onto an edge to insert it there">
+          <span
+            className="chip"
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData('application/forsyde-node', 'actor')}
+          >
+            actor
+          </span>
+          <span
+            className="chip"
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData('application/forsyde-node', 'delay')}
+          >
+            delay
+          </span>
+        </span>
         <button
           title="Switch between modern and lecture-notes diagram styles"
           onClick={p.onToggleDiagramTheme}

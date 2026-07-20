@@ -20,6 +20,18 @@ export interface DiagramCallbacks {
   onPaneClick(): void;
   onConnect(sourceHandle: string, targetHandle: string): void;
   isValidConnection(sourceHandle: string, targetHandle: string): boolean;
+  /** Palette chip dropped: on an edge (its id) or on empty canvas (null). */
+  onDropInsert(kind: 'actor' | 'delay', edgeId: string | null): void;
+}
+
+const DND_TYPE = 'application/forsyde-node';
+
+function edgeElementAt(x: number, y: number): Element | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    const g = el.closest?.('.react-flow__edge');
+    if (g) return g;
+  }
+  return null;
 }
 
 interface Props extends DiagramCallbacks {
@@ -154,8 +166,36 @@ function Diagram(props: Props) {
 }
 
 export function DiagramPane(props: Props) {
+  const hovered = useRef<Element | null>(null);
+  const clearHover = () => {
+    hovered.current?.classList.remove('drop-target');
+    hovered.current = null;
+  };
+
   return (
-    <div className={`diagram-wrap${props.stale ? ' stale' : ''}`}>
+    <div
+      className={`diagram-wrap${props.stale ? ' stale' : ''}`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DND_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        const g = edgeElementAt(e.clientX, e.clientY);
+        if (hovered.current !== g) {
+          hovered.current?.classList.remove('drop-target');
+          g?.classList.add('drop-target');
+          hovered.current = g;
+        }
+      }}
+      onDragLeave={clearHover}
+      onDrop={(e) => {
+        const kind = e.dataTransfer.getData(DND_TYPE);
+        if (kind !== 'actor' && kind !== 'delay') return;
+        e.preventDefault();
+        const edgeId = edgeElementAt(e.clientX, e.clientY)?.getAttribute('data-id') ?? null;
+        clearHover();
+        props.onDropInsert(kind, edgeId);
+      }}
+    >
       <ReactFlowProvider>
         <Diagram {...props} />
       </ReactFlowProvider>

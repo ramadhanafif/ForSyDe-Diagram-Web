@@ -123,6 +123,28 @@ body {
   color: var(--accent);
 }
 
+.palette {
+  display: flex;
+  gap: 4px;
+}
+
+.palette .chip {
+  padding: 3px 10px;
+  border: 1px dashed var(--fg-dim);
+  border-radius: 6px;
+  cursor: grab;
+  user-select: none;
+}
+
+.palette .chip:active {
+  cursor: grabbing;
+}
+
+.react-flow__edge.drop-target .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
 .editor-host {
   height: 100%;
 }

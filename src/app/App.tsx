@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { addInput, addSourceActor } from '../core/edits';
+import { addInput, addSourceActor, insertOnEdge } from '../core/edits';
 import type { ScheduleResult } from '../core/schedule';
 import { DiagramPane } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
@@ -176,6 +176,23 @@ export function App() {
     editorRef.current?.applySplices(addSourceActor(model.source, model.ir).splices);
   };
 
+  const onDropInsert = useCallback(
+    (kind: 'actor' | 'delay', edgeId: string | null) => {
+      if (!model || editorRef.current?.getDoc() !== model.source) return;
+      if (edgeId) {
+        const meta = model.dg.edgeMeta.get(edgeId);
+        if (!meta) return;
+        editorRef.current?.applySplices(
+          insertOnEdge(model.source, model.ir, meta.sig, kind).splices,
+        );
+      } else if (kind === 'actor') {
+        // dropped on empty canvas: a source actor; a floating delay has no valid text form
+        editorRef.current?.applySplices(addSourceActor(model.source, model.ir).splices);
+      }
+    },
+    [model],
+  );
+
   const schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
 
   return (
@@ -227,6 +244,7 @@ export function App() {
             onPaneClick={() => setPopover(null)}
             onConnect={onConnect}
             isValidConnection={isValidConnection}
+            onDropInsert={onDropInsert}
           />
           {popover && model && (
             <EditPopover

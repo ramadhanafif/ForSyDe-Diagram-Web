@@ -64,6 +64,22 @@ compiler, without GHC, so function bodies are not type-checked:
 Everything else (function definitions, `main`, type signatures) is carried along as
 opaque text.
 
+## Acknowledgements
+
+- The [ForSyDe project](https://forsyde.github.io/) at KTH Royal Institute of
+  Technology: this playground models the
+  [ForSyDe Shallow](https://forsyde.github.io/forsyde-shallow/) SDF dialect,
+  and its parser and scheduler mirror the
+  [forsyde-devtools](https://github.com/sthaeron/forsyde-devtools) reference
+  compiler, which also generated the parity fixtures.
+- The lecture diagram style follows the figures in the KTH embedded systems
+  lecture notes and the conventions of
+  [forsyde-latex](https://forsyde.github.io/forsyde-latex/).
+- Built with [React Flow](https://reactflow.dev/) by xyflow for the diagram,
+  the [Eclipse Layout Kernel](https://eclipse.dev/elk/) (via
+  [elkjs](https://github.com/kieler/elkjs)) for layout, and
+  [CodeMirror](https://codemirror.net/) for the editor.
+
 ## Fixture parity
 
 `fixtures/` holds `.hs` sources and the IR JSON produced by
