@@ -1,6 +1,6 @@
 # ForSyDe Playground
 
-Try it: https://ramadhanafif.github.io/ForSyDe-Diagram-Web/
+Try it: <https://ramadhanafif.github.io/ForSyDe-Diagram-Web/>
 
 Live SDF dataflow diagrams for [ForSyDe Shallow](https://forsyde.github.io/forsyde-shallow/)
 models, fully in the browser. Type a model on the left and see the laid-out dataflow
@@ -10,6 +10,8 @@ backend.
 Built as a companion to [forsyde-devtools](https://github.com/sthaeron/forsyde-devtools):
 the parser and scheduler mirror the reference Haskell compiler and are tested against
 fixtures generated from it.
+
+Primary motivation in building this project is to explore tool that are easier to use in browser environments, provide better visuals, and more straightforward in development. This project is made on top of the success of [forsyde-devtools](https://github.com/sthaeron/forsyde-devtools), which internally uses KLighD and elk.js as diagram layout placement tool.
 
 ## Development
 
@@ -82,6 +84,12 @@ Everything else (function definitions, `main`, type signatures) is carried along
 opaque text.
 
 ## Acknowledgements
+
+Special thanks to [Ingo Sander](https://www.kth.se/profile/ingo) and the [ForSyDe](https://forsyde.github.io/) team at KTH Royal Institute of
+Technology, whose formal system design methodology and teaching this
+playground builds on.
+
+More acknowledgements for:
 
 - The [ForSyDe project](https://forsyde.github.io/) at KTH Royal Institute of
   Technology: this playground models the
