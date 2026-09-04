@@ -23,11 +23,26 @@ export interface EdgeMeta {
 }
 
 const CHAR_W = 7.5;
+/** Smallest circle that still fits the stacked lines legibly. */
+const MIN_CIRCLE_DIAMETER = 56;
+/** Horizontal slack added around the widest stacked line. */
+const CIRCLE_PADDING = 18;
+/** Floor for the width estimate so short lines still get a round node. */
+const MIN_STACK_CHARS = 4;
+/** Smallest io pill; narrower labels would clip. */
+const MIN_IO_WIDTH = 30;
+const IO_HEIGHT = 20;
+/** Elk ports are points, not visuals. */
+const PORT_SIZE = 2;
+/** Gaps between layers, sibling nodes, and edges vs nodes. */
+const LAYER_SPACING = '64';
+const NODE_SPACING = '44';
+const EDGE_NODE_SPACING = '16';
 
 /** Circle diameter fitting the widest stacked line (forsyde figure style). */
 function circleSize(stack: string[]): { width: number; height: number } {
-  const chars = Math.max(...stack.map((s) => s.length), 4);
-  const d = Math.max(56, chars * CHAR_W + 18);
+  const chars = Math.max(...stack.map((s) => s.length), MIN_STACK_CHARS);
+  const d = Math.max(MIN_CIRCLE_DIAMETER, chars * CHAR_W + CIRCLE_PADDING);
   return { width: d, height: d };
 }
 
@@ -76,8 +91,8 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): Diagr
     meta.set(io, { kind: 'io', label: io });
     children.push({
       id: io,
-      width: Math.max(30, io.length * CHAR_W),
-      height: 20,
+      width: Math.max(MIN_IO_WIDTH, io.length * CHAR_W),
+      height: IO_HEIGHT,
       layoutOptions: { 'elk.layered.layering.layerConstraint': 'FIRST' },
     });
   }
@@ -85,8 +100,8 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): Diagr
     meta.set(io, { kind: 'io', label: io });
     children.push({
       id: io,
-      width: Math.max(30, io.length * CHAR_W),
-      height: 20,
+      width: Math.max(MIN_IO_WIDTH, io.length * CHAR_W),
+      height: IO_HEIGHT,
       layoutOptions: { 'elk.layered.layering.layerConstraint': 'LAST' },
     });
   }
@@ -120,9 +135,9 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): Diagr
       'elk.algorithm': 'layered',
       'elk.direction': 'RIGHT',
       'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '64',
-      'elk.spacing.nodeNode': '44',
-      'elk.spacing.edgeNode': '16',
+      'elk.layered.spacing.nodeNodeBetweenLayers': LAYER_SPACING,
+      'elk.spacing.nodeNode': NODE_SPACING,
+      'elk.spacing.edgeNode': EDGE_NODE_SPACING,
     },
     children,
     edges,
@@ -152,16 +167,16 @@ function portList(name: string, ir: IRSystem): ElkNode['ports'] {
     if (s.target.name === name) {
       push({
         id: `${name}.in.${s.name}`,
-        width: 2,
-        height: 2,
+        width: PORT_SIZE,
+        height: PORT_SIZE,
         layoutOptions: { 'elk.port.side': 'WEST' },
       });
     }
     if (s.source.name === name) {
       push({
         id: `${name}.out.${s.name}`,
-        width: 2,
-        height: 2,
+        width: PORT_SIZE,
+        height: PORT_SIZE,
         layoutOptions: { 'elk.port.side': 'EAST' },
       });
     }

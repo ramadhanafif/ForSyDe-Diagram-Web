@@ -330,7 +330,6 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
     moduleName: null,
     system: null,
     procSpecs: [],
-    otherBindings: [],
     procSpecsEnd: source.length,
   };
 
@@ -375,8 +374,6 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
       }
       continue;
     }
-
-    mod.otherBindings.push(head.text);
   }
 
   if (!mod.system) {

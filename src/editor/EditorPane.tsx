@@ -1,6 +1,7 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { StreamLanguage } from '@codemirror/language';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
+import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { haskell } from '@codemirror/legacy-modes/mode/haskell';
@@ -37,7 +38,8 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
     const extensions = [
       lineNumbers(),
       history(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
+      keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap]),
+      highlightSelectionMatches(),
       StreamLanguage.define(haskell),
       lintGutter(),
       EditorView.updateListener.of((update) => {
@@ -91,9 +93,10 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
     gotoOffset(offset) {
       const v = view.current;
       if (!v) return;
+      const at = Math.min(Math.max(offset, 0), v.state.doc.length);
       v.dispatch({
-        selection: { anchor: offset },
-        effects: EditorView.scrollIntoView(offset, { y: 'center' }),
+        selection: { anchor: at },
+        effects: EditorView.scrollIntoView(at, { y: 'center' }),
       });
       v.focus();
     },

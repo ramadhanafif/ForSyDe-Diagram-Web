@@ -65,7 +65,6 @@ export interface IRSystem {
   outputs: string[];
   processes: IRProcess[];
   signals: IRSignal[];
-  functions: { name: string }[];
   spans: SpanIndex;
 }
 

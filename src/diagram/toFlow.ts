@@ -27,6 +27,9 @@ export interface FlowEdgeData extends Record<string, unknown> {
 export type FlowNode = Node<FlowNodeData>;
 export type FlowEdge = Edge<FlowEdgeData>;
 
+/** Hit-area width for edge clicks (orthogonal routes are 1px thin). */
+const EDGE_INTERACTION_WIDTH = 14;
+
 interface Section {
   startPoint: { x: number; y: number };
   endPoint: { x: number; y: number };
@@ -78,7 +81,7 @@ export function toFlow(
       target: tgtRef.split('.')[0]!,
       sourceHandle: srcRef.includes('.') ? srcRef : undefined,
       targetHandle: tgtRef.includes('.') ? tgtRef : undefined,
-      interactionWidth: 14,
+      interactionWidth: EDGE_INTERACTION_WIDTH,
       data: { meta: m, points, showUnitRates },
     });
   }

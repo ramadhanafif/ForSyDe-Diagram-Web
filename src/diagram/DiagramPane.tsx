@@ -1,4 +1,5 @@
 import {
+  Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
@@ -18,6 +19,12 @@ export interface DiagramCallbacks {
   onNodeClick(id: string, x: number, y: number): void;
   onEdgeClick(edgeId: string, x: number, y: number): void;
   onPaneClick(): void;
+  /** Right-click hit: node (its data-id), edge, or empty canvas. Coords are client. */
+  onContextMenu(
+    target: { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string } | { kind: 'canvas' },
+    x: number,
+    y: number,
+  ): void;
   onConnect(sourceHandle: string, targetHandle: string): void;
   isValidConnection(sourceHandle: string, targetHandle: string): boolean;
   /** Palette chip dropped: on an edge (its id) or on empty canvas (null). */
@@ -27,6 +34,14 @@ export interface DiagramCallbacks {
 }
 
 const DND_TYPE = 'application/forsyde-node';
+
+/** Fit-to-view framing: padding fraction, zoom cap, and animation time. */
+const FIT_PADDING = 0.08;
+const FIT_MAX_ZOOM = 2;
+const FIT_DURATION_MS = 150;
+/** Zoom limits on the canvas. */
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 4;
 
 function edgeElementAt(x: number, y: number): Element | null {
   for (const el of document.elementsFromPoint(x, y)) {
@@ -125,7 +140,7 @@ function Diagram(props: Props) {
     const pending = consumePendingFit();
     if (fitRequest !== handledFit.current || pending) {
       handledFit.current = fitRequest;
-      void fitView({ padding: 0.08, maxZoom: 2, duration: 150 });
+      void fitView({ padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS });
     }
   }, [fitRequest, nodes, fitView, consumePendingFit]);
 
@@ -143,8 +158,8 @@ function Diagram(props: Props) {
       onNodesChange={onNodesChange}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
-      minZoom={0.1}
-      maxZoom={4}
+      minZoom={MIN_ZOOM}
+      maxZoom={MAX_ZOOM}
       nodesDraggable
       nodesConnectable
       elementsSelectable
@@ -208,6 +223,7 @@ function Diagram(props: Props) {
         zoomable
         nodeClassName={(n) => `mm-${n.type ?? 'io'}`}
       />
+      <Controls position="bottom-right" showInteractive={false} />
     </ReactFlow>
   );
 }
@@ -261,10 +277,29 @@ export function DiagramPane(props: Props) {
         clearHover();
         props.onDropInsert(kind, edgeId);
       }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const node = (e.target as Element).closest?.('.react-flow__node')?.getAttribute('data-id');
+        if (node) {
+          props.onContextMenu({ kind: 'node', name: node }, e.clientX, e.clientY);
+          return;
+        }
+        const edgeId = edgeElementAt(e.clientX, e.clientY)?.getAttribute('data-id');
+        if (edgeId) props.onContextMenu({ kind: 'edge', edgeId }, e.clientX, e.clientY);
+        else props.onContextMenu({ kind: 'canvas' }, e.clientX, e.clientY);
+      }}
     >
       <ReactFlowProvider>
         <Diagram {...props} />
       </ReactFlowProvider>
+      {!props.dg && (
+        <div className="empty-canvas">
+          <div className="empty-title">No diagram yet</div>
+          <div className="empty-hint">
+            Fix the errors listed above the editor, or load an example from the toolbar.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

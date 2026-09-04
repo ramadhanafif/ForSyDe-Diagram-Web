@@ -7,6 +7,9 @@ export interface ToolbarProps {
   showSchedule: boolean;
   onToggleSchedule(): void;
   onAddActor(): void;
+  onAddDelay(): void;
+  onExportPng(): void;
+  onTour(): void;
   diagramTheme: 'modern' | 'lecture';
   onToggleDiagramTheme(): void;
   onToggleAppTheme(): void;
@@ -39,6 +42,15 @@ export function Toolbar(p: ToolbarProps) {
         <button title="Add an actor fed by a new system input" onClick={p.onAddActor}>
           Add actor
         </button>
+        <button
+          title="A delay lives on a signal, so it must be dropped onto an edge"
+          onClick={p.onAddDelay}
+        >
+          Add delay
+        </button>
+        <button title="Download the diagram as a PNG image" onClick={p.onExportPng}>
+          Export PNG
+        </button>
         <span className="palette" title="Drag onto an edge to insert it there">
           <span
             className="chip"
@@ -62,6 +74,13 @@ export function Toolbar(p: ToolbarProps) {
           {p.diagramTheme === 'modern' ? 'Lecture style' : 'Modern style'}
         </button>
         <button onClick={p.onToggleAppTheme}>Theme</button>
+        <button
+          className="tour-replay"
+          title="Replay the guided tour of the interface"
+          onClick={p.onTour}
+        >
+          Tour
+        </button>
       </span>
     </header>
   );

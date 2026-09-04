@@ -1,12 +1,17 @@
+import { toPng } from 'html-to-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { addInput, addInputError, addSourceActor, insertOnEdge } from '../core/edits';
-import type { IRSystem } from '../core/ir';
+import { orderDiagnostics, type Diagnostic } from '../core/ast';
+import { addInput, addInputError, addSourceActor, deleteProcess, insertOnEdge } from '../core/edits';
+import { isDelay, type IRSystem } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
+import { Menu, menuItems, type MenuTarget } from '../diagram/ContextMenu';
 import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
 import { examples } from './examples';
+import { preferredTheme, storageGet, storageGetJson, storageSet } from './storage';
 import { Toolbar } from './Toolbar';
+import { startTour, TOUR_SEEN_KEY } from './tour';
 import { usePipeline } from './usePipeline';
 
 type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
@@ -120,6 +125,31 @@ function Legend() {
   );
 }
 
+/** Clickable list of diagnostics, errors first; click jumps the cursor to the span. */
+function ErrorBar({
+  diagnostics,
+  onGoto,
+}: {
+  diagnostics: Diagnostic[];
+  onGoto(offset: number): void;
+}) {
+  if (!diagnostics.length) return null;
+  return (
+    <div className="error-bar">
+      {orderDiagnostics(diagnostics).map((d, i) => (
+        <button
+          key={i}
+          className={d.severity === 'error' ? 'err' : 'warn'}
+          title="Jump to this diagnostic"
+          onClick={() => onGoto(d.span.from)}
+        >
+          {d.message}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Number of weakly connected components over processes and io nodes. */
 function componentCount(ir: IRSystem): number {
   const nodes = [...ir.processes.map((p) => p.name), ...ir.inputs, ...ir.outputs];
@@ -137,12 +167,13 @@ function componentCount(ir: IRSystem): number {
   return new Set(nodes.map(find)).size;
 }
 
-const initialAppTheme = (): string =>
-  localStorage.getItem('theme') ??
-  (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const NOTICE_TIMEOUT_MS = 5000;
+const FLASH_TIMEOUT_MS = 1800;
+
+const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
 
 const initialDiagramTheme = (): 'modern' | 'lecture' =>
-  localStorage.getItem('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
+  storageGet('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
 
 /** Signal carried by a source handle: `proc.out.sig` or `sig.io.src`. */
 function handleSignal(handle: string): string | null {
@@ -165,21 +196,17 @@ export function App() {
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [showFlags, setShowFlags] = useState<ShowFlags>(() => {
-    try {
-      return { ...DEFAULT_FLAGS, ...JSON.parse(localStorage.getItem('showFlags') ?? '{}') };
-    } catch {
-      return DEFAULT_FLAGS;
-    }
-  });
+  const [showFlags, setShowFlags] = useState<ShowFlags>(() =>
+    storageGetJson('showFlags', DEFAULT_FLAGS),
+  );
   const [legendOpen, setLegendOpen] = useState(false);
-  useEffect(() => localStorage.setItem('showFlags', JSON.stringify(showFlags)), [showFlags]);
+  useEffect(() => storageSet('showFlags', JSON.stringify(showFlags)), [showFlags]);
 
   // transient toast for refused gestures
   const [notice, setNotice] = useState('');
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(''), 5000);
+    const t = setTimeout(() => setNotice(''), NOTICE_TIMEOUT_MS);
     return () => clearTimeout(t);
   }, [notice]);
 
@@ -207,28 +234,37 @@ export function App() {
   }
   useEffect(() => {
     if (!flash.length) return;
-    const t = setTimeout(() => setFlash([]), 1800);
+    const t = setTimeout(() => setFlash([]), FLASH_TIMEOUT_MS);
     return () => clearTimeout(t);
   }, [flash]);
   const [popover, setPopover] = useState<{ target: PopoverTarget; x: number; y: number } | null>(
     null,
   );
+  const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number } | null>(null);
   const pendingFit = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', appTheme);
-    localStorage.setItem('theme', appTheme);
+    storageSet('theme', appTheme);
   }, [appTheme]);
-  useEffect(() => localStorage.setItem('diagramTheme', diagramTheme), [diagramTheme]);
+  useEffect(() => storageSet('diagramTheme', diagramTheme), [diagramTheme]);
 
-  const loadExample = useCallback((name: string) => {
-    const ex = examples.find((e) => e.name === name);
-    if (!ex) return;
-    setExample(name);
-    setPopover(null);
-    pendingFit.current = true;
-    editorRef.current?.setSource(ex.source);
-  }, []);
+  const loadExample = useCallback(
+    (name: string) => {
+      const ex = examples.find((e) => e.name === name);
+      if (!ex) return;
+      const cur = examples.find((e) => e.name === example);
+      if (cur && editorRef.current?.getDoc() !== cur.source) {
+        if (!window.confirm('Discard unsaved changes and load this example?')) return;
+      }
+      setExample(name);
+      setPopover(null);
+      setMenu(null);
+      pendingFit.current = true;
+      editorRef.current?.setSource(ex.source);
+    },
+    [example],
+  );
 
   // initial example: load into the editor once it is mounted (idempotent under StrictMode)
   useEffect(() => {
@@ -240,6 +276,14 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // first-run tour: once a valid model is on screen, never on a broken/empty first paint
+  const tourStarted = useRef(false);
+  useEffect(() => {
+    if (tourStarted.current || storageGet(TOUR_SEEN_KEY) || !model) return;
+    tourStarted.current = true;
+    void startTour(() => storageSet(TOUR_SEEN_KEY, '1'));
+  }, [model]);
+
   // consulted by the diagram after each graph update, outside render
   const consumePendingFit = useCallback(() => {
     if (!pendingFit.current) return false;
@@ -247,7 +291,8 @@ export function App() {
     return true;
   }, []);
 
-  // splitter drag
+  // splitter drag; initial ratio read once (lazy state) for render stability
+  const [splitRatio] = useState(() => storageGet('splitRatio') ?? '45%');
   const panesRef = useRef<HTMLElement>(null);
   const onSplitterDown = (down: React.PointerEvent<HTMLDivElement>) => {
     const splitter = down.currentTarget;
@@ -263,16 +308,16 @@ export function App() {
       splitter.removeEventListener('pointermove', onMove);
       splitter.removeEventListener('pointerup', onUp);
       const v = panesRef.current?.style.getPropertyValue('--split');
-      if (v) localStorage.setItem('splitRatio', v);
+      if (v) storageSet('splitRatio', v);
     };
     splitter.addEventListener('pointermove', onMove);
     splitter.addEventListener('pointerup', onUp);
   };
 
-  const paneCoords = (clientX: number, clientY: number) => {
+  const paneCoords = useCallback((clientX: number, clientY: number) => {
     const rect = paneRef.current?.getBoundingClientRect();
     return { x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) };
-  };
+  }, []);
 
   const isValidConnection = useCallback(
     (sourceHandle: string, targetHandle: string): boolean => {
@@ -280,31 +325,99 @@ export function App() {
       const sig = handleSignal(sourceHandle);
       const parts = targetHandle.split('.');
       if (!sig || parts[1] !== 'in' || parts[2] !== '__new') return false;
-      return addInput(model.source, model.ir, parts[0]!, sig) !== null;
+      return addInput(model.ir, parts[0]!, sig) !== null;
     },
     [model],
   );
 
   const onConnect = useCallback(
     (sourceHandle: string, targetHandle: string) => {
-      if (!model || editorRef.current?.getDoc() !== model.source) return;
+      if (!model) return;
+      if (editorRef.current?.getDoc() !== model.source) {
+        setNotice('diagram is stale, try again once it updates');
+        return;
+      }
       const sig = handleSignal(sourceHandle);
       const proc = targetHandle.split('.')[0];
       if (!sig || !proc) return;
-      const splices = addInput(model.source, model.ir, proc, sig);
+      const splices = addInput(model.ir, proc, sig);
       if (splices) editorRef.current?.applySplices(splices);
     },
     [model],
   );
 
+  // ponytail: html-to-image deep-clones SVG subtrees without inlining computed
+  // paint, so ancestor-scoped fill/stroke rules arrive blank at the rasterizer
+  // (black nodes); pin the live values for the snapshot, then restore.
+  const onExportPng = useCallback(() => {
+    const el = paneRef.current;
+    if (!el) {
+      setNotice('nothing to export yet');
+      return;
+    }
+    const saved: Array<[CSSStyleDeclaration, string, string]> = [];
+    const pin = (selector: string, props: string[]) => {
+      el.querySelectorAll<SVGGraphicsElement>(selector).forEach((node) => {
+        const computed = getComputedStyle(node);
+        props.forEach((prop) => {
+          saved.push([node.style, prop, node.style.getPropertyValue(prop)]);
+          node.style.setProperty(prop, computed.getPropertyValue(prop));
+        });
+      });
+    };
+    pin('circle.node-shape', ['fill', 'stroke']);
+    pin('.react-flow__edge-path', ['stroke']);
+    pin('#fsd-arrow .arrow-head', ['fill']);
+    void toPng(el, {
+      filter: (n) =>
+        !(n instanceof Element) ||
+        (!n.classList?.contains('react-flow__minimap') &&
+          !n.classList?.contains('react-flow__controls') &&
+          !n.classList?.contains('float-controls') &&
+          !n.classList?.contains('legend') &&
+          !n.classList?.contains('popover') &&
+          !n.classList?.contains('schedule-panel') &&
+          !n.classList?.contains('schedule-chip') &&
+          !n.classList?.contains('status-chip') &&
+          !n.classList?.contains('sched-banner') &&
+          !n.classList?.contains('notice-toast') &&
+          !n.classList?.contains('empty-canvas')),
+    })
+      .then((url) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'diagram.png';
+        a.click();
+      })
+      .catch(() => setNotice('export failed'))
+      .finally(() => {
+        for (const [style, prop, prior] of saved) {
+          if (prior) style.setProperty(prop, prior);
+          else style.removeProperty(prop);
+        }
+      });
+  }, []);
+
+  const onAddDelay = () => {
+    setNotice('a delay needs a signal: drag the delay chip onto an edge');
+  };
+
   const onAddActor = () => {
-    if (!model || editorRef.current?.getDoc() !== model.source) return;
+    if (!model) return;
+    if (editorRef.current?.getDoc() !== model.source) {
+      setNotice('diagram is stale, try again once it updates');
+      return;
+    }
     editorRef.current?.applySplices(addSourceActor(model.source, model.ir).splices);
   };
 
   const onDropInsert = useCallback(
     (kind: 'actor' | 'delay', edgeId: string | null) => {
-      if (!model || editorRef.current?.getDoc() !== model.source) return;
+      if (!model) return;
+      if (editorRef.current?.getDoc() !== model.source) {
+        setNotice('diagram is stale, try again once it updates');
+        return;
+      }
       if (edgeId) {
         const meta = model.dg.edgeMeta.get(edgeId);
         if (!meta) return;
@@ -317,6 +430,88 @@ export function App() {
       }
     },
     [model],
+  );
+
+  /** Menu shortcut into the popover: same targets, actions inline, same staleness guard. */
+  const onMenuPick = useCallback(
+    (action: string) => {
+      if (!model || !menu) return;
+      if (editorRef.current?.getDoc() !== model.source) {
+        setNotice('diagram is stale, try again once it updates');
+        return;
+      }
+      const editor = editorRef.current!;
+      if (menu.target.kind === 'canvas') {
+        if (action === 'add-actor') {
+          editor.applySplices(addSourceActor(model.source, model.ir).splices);
+          setMenu(null);
+        } else if (action === 'fit-view') {
+          setFitRequest((n) => n + 1);
+          setMenu(null);
+        }
+        return;
+      }
+      if (menu.target.kind === 'edge') {
+        const meta = model.dg.edgeMeta.get(menu.target.edgeId);
+        if (action === 'insert-actor' || action === 'insert-delay') {
+          if (!meta) return;
+          editor.applySplices(
+            insertOnEdge(model.source, model.ir, meta.sig, action === 'insert-actor' ? 'actor' : 'delay').splices,
+          );
+          setMenu(null);
+        } else if (action === 'rename-signal') {
+          if (!meta) return;
+          setMenu(null);
+          setPopover({
+            target: { kind: 'edge', edgeId: menu.target.edgeId },
+            x: menu.x,
+            y: menu.y,
+          });
+        }
+        return;
+      }
+      const target = menu.target;
+      if (target.kind !== 'node') return;
+      const p = model.ir.processes.find((q) => q.name === target.name);
+      if (!p) {
+        setMenu(null);
+        return;
+      }
+      const delay = isDelay(p);
+      if (action === 'delete') {
+        const splices = deleteProcess(model.ir, p.name);
+        if (splices) {
+          setMenu(null);
+          editor.applySplices(splices);
+        }
+        return;
+      }
+      if (action === 'goto-definition') {
+        const fn = delay ? '' : p.function;
+        if (!fn || fn === 'NULL') return;
+        const m = new RegExp(`^${fn}\\b`, 'm').exec(editor.getDoc());
+        if (m) {
+          setMenu(null);
+          editor.gotoOffset(m.index);
+        }
+        return;
+      }
+      // rename / rates / function / tokens: open the popover pre-focused at the same spot
+      if (action === 'rename' || action === 'rates' || action === 'function' || action === 'tokens') {
+        setMenu(null);
+        setPopover({ target: { kind: 'node', name: p.name }, x: menu.x, y: menu.y });
+      }
+    },
+    [model, menu],
+  );
+
+  const onContextMenu = useCallback(
+    (target: MenuTarget, cx: number, cy: number) => {
+      if (target.kind === 'node' && target.name === '') return;
+      setPopover(null);
+      setMenu({ target, ...paneCoords(cx, cy) });
+    },
+    [paneCoords],
   );
 
   const onConnectRefused = useCallback(
@@ -347,6 +542,9 @@ export function App() {
         showSchedule={showSchedule}
         onToggleSchedule={() => setShowSchedule((v) => !v)}
         onAddActor={onAddActor}
+        onAddDelay={onAddDelay}
+        onExportPng={onExportPng}
+        onTour={() => void startTour(() => storageSet(TOUR_SEEN_KEY, '1'))}
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
         onToggleAppTheme={() => setAppTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
@@ -354,9 +552,13 @@ export function App() {
       <main
         className="panes"
         ref={panesRef}
-        style={{ ['--split' as string]: localStorage.getItem('splitRatio') ?? '45%' }}
+        style={{ ['--split' as string]: splitRatio }}
       >
         <section className="pane editor-pane">
+          <ErrorBar
+            diagnostics={pipe.diagnostics}
+            onGoto={(offset) => editorRef.current?.gotoOffset(offset)}
+          />
           <EditorPane ref={editorRef} onChange={setSource} diagnostics={pipe.diagnostics} />
         </section>
         <div
@@ -383,7 +585,11 @@ export function App() {
             onEdgeClick={(edgeId, cx, cy) =>
               setPopover({ target: { kind: 'edge', edgeId }, ...paneCoords(cx, cy) })
             }
-            onPaneClick={() => setPopover(null)}
+            onPaneClick={() => {
+              setPopover(null);
+              setMenu(null);
+            }}
+            onContextMenu={onContextMenu}
             onConnect={onConnect}
             isValidConnection={isValidConnection}
             onDropInsert={onDropInsert}
@@ -431,6 +637,24 @@ export function App() {
               model={model}
               editorRef={editorRef}
               onClose={() => setPopover(null)}
+            />
+          )}
+          {menu && model && (
+            <Menu
+              x={menu.x}
+              y={menu.y}
+              items={menuItems(
+                menu.target.kind === 'edge'
+                  ? {
+                      kind: 'edge',
+                      edgeId: menu.target.edgeId,
+                      signalName: model.dg.edgeMeta.get(menu.target.edgeId)?.sig.name ?? '',
+                    }
+                  : menu.target,
+                model.ir,
+              )}
+              onPick={onMenuPick}
+              onClose={() => setMenu(null)}
             />
           )}
           {pipe.stale && model && (

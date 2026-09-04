@@ -102,6 +102,17 @@ body {
   background: var(--bg);
 }
 
+.editor-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-pane .editor-host {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
 .splitter {
   cursor: col-resize;
   background: var(--border);
@@ -800,6 +811,58 @@ body {
   bottom: 12px;
   background: var(--error);
   color: #fff;
+}
+
+.empty-canvas {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.empty-canvas .empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}
+
+.empty-canvas .empty-hint {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+/* diagnostics above the editor; click jumps the cursor to the span */
+.error-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.error-bar button {
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 3px solid var(--error);
+  padding: 2px 8px;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.error-bar button.warn {
+  border-left-color: var(--warning);
+}
+
+.error-bar button:hover {
+  color: var(--accent);
 }
 
 /* edit popover */

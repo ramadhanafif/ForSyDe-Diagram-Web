@@ -11,6 +11,24 @@ export interface Diagnostic {
   span: Span;
 }
 
+/** Errors first, then by source offset — the order the error bar lists diagnostics. */
+export function orderDiagnostics(diags: Diagnostic[]): Diagnostic[] {
+  return [...diags].sort((a, b) =>
+    a.severity === b.severity ? a.span.from - b.span.from : a.severity === 'error' ? -1 : 1,
+  );
+}
+
+/** Diagnostic surfaced when ELK layout throws; the last-good model stays on screen. */
+export function layoutFailed(err: unknown): Diagnostic {
+  const detail = err instanceof Error ? err.message : String(err);
+  return {
+    severity: 'error',
+    code: 'layout-failed',
+    message: `diagram layout failed: ${detail}`,
+    span: { from: 0, to: 0 },
+  };
+}
+
 export interface Ident {
   name: string;
   span: Span;
@@ -87,7 +105,5 @@ export interface HsModule {
   moduleName: string | null;
   system: SystemDecl | null;
   procSpecs: ProcSpec[];
-  /** Names of top-level bindings that are neither system nor process specs (functions etc.). */
-  otherBindings: string[];
   procSpecsEnd: number; // insertion offset for new process specs
 }
