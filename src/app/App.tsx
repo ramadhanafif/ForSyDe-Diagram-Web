@@ -346,15 +346,28 @@ export function App() {
     [model],
   );
 
-  // ponytail: raster-only export; includeStyleProperties carries the CSS vars that
-  // ponytail: raster-only export; cloned subtree keeps the native class scoping
-  // (html-to-image inlines per-element styles, so ancestor selectors still match)
+  // ponytail: html-to-image deep-clones SVG subtrees without inlining computed
+  // paint, so ancestor-scoped fill/stroke rules arrive blank at the rasterizer
+  // (black nodes); pin the live values for the snapshot, then restore.
   const onExportPng = useCallback(() => {
     const el = paneRef.current;
     if (!el) {
       setNotice('nothing to export yet');
       return;
     }
+    const saved: Array<[CSSStyleDeclaration, string, string]> = [];
+    const pin = (selector: string, props: string[]) => {
+      el.querySelectorAll<SVGGraphicsElement>(selector).forEach((node) => {
+        const computed = getComputedStyle(node);
+        props.forEach((prop) => {
+          saved.push([node.style, prop, node.style.getPropertyValue(prop)]);
+          node.style.setProperty(prop, computed.getPropertyValue(prop));
+        });
+      });
+    };
+    pin('circle.node-shape', ['fill', 'stroke']);
+    pin('.react-flow__edge-path', ['stroke']);
+    pin('#fsd-arrow .arrow-head', ['fill']);
     void toPng(el, {
       filter: (n) =>
         !(n instanceof Element) ||
@@ -376,7 +389,13 @@ export function App() {
         a.download = 'diagram.png';
         a.click();
       })
-      .catch(() => setNotice('export failed'));
+      .catch(() => setNotice('export failed'))
+      .finally(() => {
+        for (const [style, prop, prior] of saved) {
+          if (prior) style.setProperty(prop, prior);
+          else style.removeProperty(prop);
+        }
+      });
   }, []);
 
   const onAddDelay = () => {
