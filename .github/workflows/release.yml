@@ -1,0 +1,52 @@
+name: Release
+
+# Cut a release: bump "version" in package.json, merge to main, then
+#   git tag vX.Y.Z && git push origin vX.Y.Z
+# The tag must match package.json (checked below); the workflow tests,
+# publishes a GitHub release, and deploys the tagged build to Pages.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Check tag matches package.json
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          [ "${{ github.ref_name }}" = "$pkg" ] || {
+            echo "tag ${{ github.ref_name }} != package.json $pkg"
+            exit 1
+          }
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" --generate-notes
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

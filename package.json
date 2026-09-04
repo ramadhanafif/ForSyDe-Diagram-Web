@@ -1,6 +1,6 @@
 {
   "name": "forsyde-playground",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Live SDF dataflow diagrams for ForSyDe Shallow models, in the browser",
   "scripts": {
     "test": "vitest run",

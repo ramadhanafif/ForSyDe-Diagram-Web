@@ -1,3 +1,4 @@
+import pkg from '../../package.json';
 import { examples } from './examples';
 
 export interface ToolbarProps {
@@ -19,6 +20,9 @@ export function Toolbar(p: ToolbarProps) {
   return (
     <header className="toolbar">
       <span className="brand">ForSyDe Playground</span>
+      <span className="version" title="App version">
+        v{pkg.version}
+      </span>
       <span className="toolbar-items">
         <select
           title="Load example"
