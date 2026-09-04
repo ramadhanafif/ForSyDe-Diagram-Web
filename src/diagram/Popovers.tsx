@@ -153,6 +153,8 @@ function NodeBody({
   const [outR, setOutR] = useState(delay ? '' : p.outRates.join(', '));
   const [fn, setFn] = useState(delay ? '' : p.function === 'NULL' ? 'undefined' : p.function);
   const [tokens, setTokens_] = useState(delay ? p.tokens.join(', ') : '');
+  const [confirmDelete, setConfirmDelete] = useState('');
+  const armed = confirmDelete === p.name;
 
   const buildSplices = (): { splices: Splice[]; error?: string } => {
     const all: Splice[] = [];
@@ -254,15 +256,20 @@ function NodeBody({
         <button type="submit">apply</button>
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            if (!armed) {
+              setConfirmDelete(p.name);
+              return;
+            }
+            setConfirmDelete('');
             apply(
               () =>
                 deleteProcess(model.source, model.ir, p.name) ??
                 'only single-input single-output processes can be deleted here',
-            )
-          }
+            );
+          }}
         >
-          delete
+          {armed ? 'confirm delete?' : 'delete'}
         </button>
       </label>
     </form>

@@ -221,14 +221,21 @@ export function App() {
   }, [appTheme]);
   useEffect(() => localStorage.setItem('diagramTheme', diagramTheme), [diagramTheme]);
 
-  const loadExample = useCallback((name: string) => {
-    const ex = examples.find((e) => e.name === name);
-    if (!ex) return;
-    setExample(name);
-    setPopover(null);
-    pendingFit.current = true;
-    editorRef.current?.setSource(ex.source);
-  }, []);
+  const loadExample = useCallback(
+    (name: string) => {
+      const ex = examples.find((e) => e.name === name);
+      if (!ex) return;
+      const cur = examples.find((e) => e.name === example);
+      if (cur && editorRef.current?.getDoc() !== cur.source) {
+        if (!window.confirm('Discard unsaved changes and load this example?')) return;
+      }
+      setExample(name);
+      setPopover(null);
+      pendingFit.current = true;
+      editorRef.current?.setSource(ex.source);
+    },
+    [example],
+  );
 
   // initial example: load into the editor once it is mounted (idempotent under StrictMode)
   useEffect(() => {
@@ -287,7 +294,11 @@ export function App() {
 
   const onConnect = useCallback(
     (sourceHandle: string, targetHandle: string) => {
-      if (!model || editorRef.current?.getDoc() !== model.source) return;
+      if (!model) return;
+      if (editorRef.current?.getDoc() !== model.source) {
+        setNotice('diagram is stale, try again once it updates');
+        return;
+      }
       const sig = handleSignal(sourceHandle);
       const proc = targetHandle.split('.')[0];
       if (!sig || !proc) return;
@@ -298,13 +309,21 @@ export function App() {
   );
 
   const onAddActor = () => {
-    if (!model || editorRef.current?.getDoc() !== model.source) return;
+    if (!model) return;
+    if (editorRef.current?.getDoc() !== model.source) {
+      setNotice('diagram is stale, try again once it updates');
+      return;
+    }
     editorRef.current?.applySplices(addSourceActor(model.source, model.ir).splices);
   };
 
   const onDropInsert = useCallback(
     (kind: 'actor' | 'delay', edgeId: string | null) => {
-      if (!model || editorRef.current?.getDoc() !== model.source) return;
+      if (!model) return;
+      if (editorRef.current?.getDoc() !== model.source) {
+        setNotice('diagram is stale, try again once it updates');
+        return;
+      }
       if (edgeId) {
         const meta = model.dg.edgeMeta.get(edgeId);
         if (!meta) return;
