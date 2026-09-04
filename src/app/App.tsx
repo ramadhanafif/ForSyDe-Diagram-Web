@@ -1,15 +1,17 @@
 import { toPng } from 'html-to-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
-import { addInput, addInputError, addSourceActor, insertOnEdge } from '../core/edits';
-import type { IRSystem } from '../core/ir';
+import { addInput, addInputError, addSourceActor, deleteProcess, insertOnEdge } from '../core/edits';
+import { isDelay, type IRSystem } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
+import { Menu, menuItems, type MenuTarget } from '../diagram/ContextMenu';
 import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
 import { examples } from './examples';
 import { preferredTheme, storageGet, storageGetJson, storageSet } from './storage';
 import { Toolbar } from './Toolbar';
+import { startTour, TOUR_SEEN_KEY } from './tour';
 import { usePipeline } from './usePipeline';
 
 type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
@@ -238,6 +240,7 @@ export function App() {
   const [popover, setPopover] = useState<{ target: PopoverTarget; x: number; y: number } | null>(
     null,
   );
+  const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number } | null>(null);
   const pendingFit = useRef(false);
 
   useEffect(() => {
@@ -256,6 +259,7 @@ export function App() {
       }
       setExample(name);
       setPopover(null);
+      setMenu(null);
       pendingFit.current = true;
       editorRef.current?.setSource(ex.source);
     },
@@ -271,6 +275,14 @@ export function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // first-run tour: once a valid model is on screen, never on a broken/empty first paint
+  const tourStarted = useRef(false);
+  useEffect(() => {
+    if (tourStarted.current || storageGet(TOUR_SEEN_KEY) || !model) return;
+    tourStarted.current = true;
+    void startTour(() => storageSet(TOUR_SEEN_KEY, '1'));
+  }, [model]);
 
   // consulted by the diagram after each graph update, outside render
   const consumePendingFit = useCallback(() => {
@@ -302,10 +314,10 @@ export function App() {
     splitter.addEventListener('pointerup', onUp);
   };
 
-  const paneCoords = (clientX: number, clientY: number) => {
+  const paneCoords = useCallback((clientX: number, clientY: number) => {
     const rect = paneRef.current?.getBoundingClientRect();
     return { x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) };
-  };
+  }, []);
 
   const isValidConnection = useCallback(
     (sourceHandle: string, targetHandle: string): boolean => {
@@ -334,9 +346,11 @@ export function App() {
     [model],
   );
 
-  // ponytail: raster-only export; flow root (not viewport) so the arrow defs travel, chrome filtered
+  // ponytail: raster-only export; includeStyleProperties carries the CSS vars that
+  // ponytail: raster-only export; cloned subtree keeps the native class scoping
+  // (html-to-image inlines per-element styles, so ancestor selectors still match)
   const onExportPng = useCallback(() => {
-    const el = paneRef.current?.querySelector('.react-flow') as HTMLElement | null;
+    const el = paneRef.current;
     if (!el) {
       setNotice('nothing to export yet');
       return;
@@ -345,7 +359,16 @@ export function App() {
       filter: (n) =>
         !(n instanceof Element) ||
         (!n.classList?.contains('react-flow__minimap') &&
-          !n.classList?.contains('react-flow__controls')),
+          !n.classList?.contains('react-flow__controls') &&
+          !n.classList?.contains('float-controls') &&
+          !n.classList?.contains('legend') &&
+          !n.classList?.contains('popover') &&
+          !n.classList?.contains('schedule-panel') &&
+          !n.classList?.contains('schedule-chip') &&
+          !n.classList?.contains('status-chip') &&
+          !n.classList?.contains('sched-banner') &&
+          !n.classList?.contains('notice-toast') &&
+          !n.classList?.contains('empty-canvas')),
     })
       .then((url) => {
         const a = document.createElement('a');
@@ -390,6 +413,88 @@ export function App() {
     [model],
   );
 
+  /** Menu shortcut into the popover: same targets, actions inline, same staleness guard. */
+  const onMenuPick = useCallback(
+    (action: string) => {
+      if (!model || !menu) return;
+      if (editorRef.current?.getDoc() !== model.source) {
+        setNotice('diagram is stale, try again once it updates');
+        return;
+      }
+      const editor = editorRef.current!;
+      if (menu.target.kind === 'canvas') {
+        if (action === 'add-actor') {
+          editor.applySplices(addSourceActor(model.source, model.ir).splices);
+          setMenu(null);
+        } else if (action === 'fit-view') {
+          setFitRequest((n) => n + 1);
+          setMenu(null);
+        }
+        return;
+      }
+      if (menu.target.kind === 'edge') {
+        const meta = model.dg.edgeMeta.get(menu.target.edgeId);
+        if (action === 'insert-actor' || action === 'insert-delay') {
+          if (!meta) return;
+          editor.applySplices(
+            insertOnEdge(model.source, model.ir, meta.sig, action === 'insert-actor' ? 'actor' : 'delay').splices,
+          );
+          setMenu(null);
+        } else if (action === 'rename-signal') {
+          if (!meta) return;
+          setMenu(null);
+          setPopover({
+            target: { kind: 'edge', edgeId: menu.target.edgeId },
+            x: menu.x,
+            y: menu.y,
+          });
+        }
+        return;
+      }
+      const target = menu.target;
+      if (target.kind !== 'node') return;
+      const p = model.ir.processes.find((q) => q.name === target.name);
+      if (!p) {
+        setMenu(null);
+        return;
+      }
+      const delay = isDelay(p);
+      if (action === 'delete') {
+        const splices = deleteProcess(model.ir, p.name);
+        if (splices) {
+          setMenu(null);
+          editor.applySplices(splices);
+        }
+        return;
+      }
+      if (action === 'goto-definition') {
+        const fn = delay ? '' : p.function;
+        if (!fn || fn === 'NULL') return;
+        const m = new RegExp(`^${fn}\\b`, 'm').exec(editor.getDoc());
+        if (m) {
+          setMenu(null);
+          editor.gotoOffset(m.index);
+        }
+        return;
+      }
+      // rename / rates / function / tokens: open the popover pre-focused at the same spot
+      if (action === 'rename' || action === 'rates' || action === 'function' || action === 'tokens') {
+        setMenu(null);
+        setPopover({ target: { kind: 'node', name: p.name }, x: menu.x, y: menu.y });
+      }
+    },
+    [model, menu],
+  );
+
+  const onContextMenu = useCallback(
+    (target: MenuTarget, cx: number, cy: number) => {
+      if (target.kind === 'node' && target.name === '') return;
+      setPopover(null);
+      setMenu({ target, ...paneCoords(cx, cy) });
+    },
+    [paneCoords],
+  );
+
   const onConnectRefused = useCallback(
     (sourceHandle: string, targetHandle: string) => {
       if (!model) return;
@@ -420,6 +525,7 @@ export function App() {
         onAddActor={onAddActor}
         onAddDelay={onAddDelay}
         onExportPng={onExportPng}
+        onTour={() => void startTour(() => storageSet(TOUR_SEEN_KEY, '1'))}
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
         onToggleAppTheme={() => setAppTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
@@ -460,7 +566,11 @@ export function App() {
             onEdgeClick={(edgeId, cx, cy) =>
               setPopover({ target: { kind: 'edge', edgeId }, ...paneCoords(cx, cy) })
             }
-            onPaneClick={() => setPopover(null)}
+            onPaneClick={() => {
+              setPopover(null);
+              setMenu(null);
+            }}
+            onContextMenu={onContextMenu}
             onConnect={onConnect}
             isValidConnection={isValidConnection}
             onDropInsert={onDropInsert}
@@ -508,6 +618,24 @@ export function App() {
               model={model}
               editorRef={editorRef}
               onClose={() => setPopover(null)}
+            />
+          )}
+          {menu && model && (
+            <Menu
+              x={menu.x}
+              y={menu.y}
+              items={menuItems(
+                menu.target.kind === 'edge'
+                  ? {
+                      kind: 'edge',
+                      edgeId: menu.target.edgeId,
+                      signalName: model.dg.edgeMeta.get(menu.target.edgeId)?.sig.name ?? '',
+                    }
+                  : menu.target,
+                model.ir,
+              )}
+              onPick={onMenuPick}
+              onClose={() => setMenu(null)}
             />
           )}
           {pipe.stale && model && (

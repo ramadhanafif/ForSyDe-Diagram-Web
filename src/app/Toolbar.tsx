@@ -9,6 +9,7 @@ export interface ToolbarProps {
   onAddActor(): void;
   onAddDelay(): void;
   onExportPng(): void;
+  onTour(): void;
   diagramTheme: 'modern' | 'lecture';
   onToggleDiagramTheme(): void;
   onToggleAppTheme(): void;
@@ -73,6 +74,13 @@ export function Toolbar(p: ToolbarProps) {
           {p.diagramTheme === 'modern' ? 'Lecture style' : 'Modern style'}
         </button>
         <button onClick={p.onToggleAppTheme}>Theme</button>
+        <button
+          className="tour-replay"
+          title="Replay the guided tour of the interface"
+          onClick={p.onTour}
+        >
+          Tour
+        </button>
       </span>
     </header>
   );

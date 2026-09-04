@@ -19,6 +19,12 @@ export interface DiagramCallbacks {
   onNodeClick(id: string, x: number, y: number): void;
   onEdgeClick(edgeId: string, x: number, y: number): void;
   onPaneClick(): void;
+  /** Right-click hit: node (its data-id), edge, or empty canvas. Coords are client. */
+  onContextMenu(
+    target: { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string } | { kind: 'canvas' },
+    x: number,
+    y: number,
+  ): void;
   onConnect(sourceHandle: string, targetHandle: string): void;
   isValidConnection(sourceHandle: string, targetHandle: string): boolean;
   /** Palette chip dropped: on an edge (its id) or on empty canvas (null). */
@@ -270,6 +276,17 @@ export function DiagramPane(props: Props) {
         const edgeId = edgeElementAt(e.clientX, e.clientY)?.getAttribute('data-id') ?? null;
         clearHover();
         props.onDropInsert(kind, edgeId);
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const node = (e.target as Element).closest?.('.react-flow__node')?.getAttribute('data-id');
+        if (node) {
+          props.onContextMenu({ kind: 'node', name: node }, e.clientX, e.clientY);
+          return;
+        }
+        const edgeId = edgeElementAt(e.clientX, e.clientY)?.getAttribute('data-id');
+        if (edgeId) props.onContextMenu({ kind: 'edge', edgeId }, e.clientX, e.clientY);
+        else props.onContextMenu({ kind: 'canvas' }, e.clientX, e.clientY);
       }}
     >
       <ReactFlowProvider>

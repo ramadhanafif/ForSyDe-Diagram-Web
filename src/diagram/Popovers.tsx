@@ -16,7 +16,7 @@ import type { EditorApi } from '../editor/EditorPane';
 export type PopoverTarget = { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string };
 
 /** Minimum gap between the popover and the pane edge. */
-const POPOVER_MARGIN = 8;
+export const POPOVER_MARGIN = 8;
 
 interface Props {
   target: PopoverTarget;
