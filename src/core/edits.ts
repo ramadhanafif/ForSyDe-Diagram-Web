@@ -205,6 +205,8 @@ export function renameSignal(
  * ponytail: the actor's function is left untouched (bodies are opaque), so a
  * regenerated fixture would need a manual function-arity fix.
  */
+/** Maximum inputs on an actor: actorNMSDF only goes up to actor4NSDF. */
+const MAX_ACTOR_INPUTS = 4;
 /** Why a drag-to-connect would be refused, in SDF terms; null when it is allowed. */
 export function addInputError(ir: IRSystem, procName: string, signalName: string): string | null {
   const spans = ir.spans.processes.get(procName);
@@ -215,7 +217,8 @@ export function addInputError(ir: IRSystem, procName: string, signalName: string
   if (spans.etaParams > 0)
     return `'${procName}' is written with explicit signal parameters; only point-free specs can gain inputs here`;
   if (spans.systemBindings.length !== 1) return `'${procName}' is not instantiated in the system`;
-  if (p.inRates.length >= 4) return `'${procName}' already has 4 inputs, the actorNMSDF maximum`;
+  if (p.inRates.length >= MAX_ACTOR_INPUTS)
+    return `'${procName}' already has ${MAX_ACTOR_INPUTS} inputs, the actorNMSDF maximum`;
   const isInput = ir.inputs.includes(signalName);
   const produced = ir.signals.some((s) => s.name === signalName);
   const signalOccurs = ir.spans.signals.has(signalName);
@@ -231,7 +234,6 @@ export function addInputError(ir: IRSystem, procName: string, signalName: string
 }
 
 export function addInput(
-  source: string,
   ir: IRSystem,
   procName: string,
   signalName: string,
@@ -262,7 +264,7 @@ export function addInput(
  * (consumers are rewired to its input signal) or an unbound spec.
  * Returns null when deletion would need cascading edits.
  */
-export function deleteProcess(source: string, ir: IRSystem, name: string): Splice[] | null {
+export function deleteProcess(ir: IRSystem, name: string): Splice[] | null {
   const spans = ir.spans.processes.get(name);
   const p = ir.processes.find((q) => q.name === name);
   if (!spans || !p) return null;

@@ -36,7 +36,7 @@ function system(
   processes: IRProcess[],
   signals: IRSignal[],
 ): IRSystem {
-  return { inputs, outputs, processes, signals, functions: [], spans: emptySpans };
+  return { inputs, outputs, processes, signals, spans: emptySpans };
 }
 
 // Test systems ported verbatim from forsyde-devtools test/SDFScheduleSpec.hs

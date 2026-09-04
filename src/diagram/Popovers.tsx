@@ -15,6 +15,9 @@ import type { EditorApi } from '../editor/EditorPane';
 
 export type PopoverTarget = { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string };
 
+/** Minimum gap between the popover and the pane edge. */
+const POPOVER_MARGIN = 8;
+
 interface Props {
   target: PopoverTarget;
   x: number;
@@ -41,8 +44,8 @@ export function EditPopover({ target, x, y, model, editorRef, onClose }: Props) 
     const pane = el?.offsetParent as HTMLElement | null;
     if (!el || !pane) return;
     setPos({
-      x: Math.max(8, Math.min(x, pane.clientWidth - el.offsetWidth - 8)),
-      y: Math.max(8, Math.min(y, pane.clientHeight - el.offsetHeight - 8)),
+      x: Math.max(POPOVER_MARGIN, Math.min(x, pane.clientWidth - el.offsetWidth - POPOVER_MARGIN)),
+      y: Math.max(POPOVER_MARGIN, Math.min(y, pane.clientHeight - el.offsetHeight - POPOVER_MARGIN)),
     });
   }, [x, y]);
 
@@ -264,7 +267,7 @@ function NodeBody({
             setConfirmDelete('');
             apply(
               () =>
-                deleteProcess(model.source, model.ir, p.name) ??
+                deleteProcess(model.ir, p.name) ??
                 'only single-input single-output processes can be deleted here',
             );
           }}

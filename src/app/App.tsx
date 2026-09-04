@@ -8,6 +8,7 @@ import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPa
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
 import { examples } from './examples';
+import { preferredTheme, storageGet, storageGetJson, storageSet } from './storage';
 import { Toolbar } from './Toolbar';
 import { usePipeline } from './usePipeline';
 
@@ -164,12 +165,13 @@ function componentCount(ir: IRSystem): number {
   return new Set(nodes.map(find)).size;
 }
 
-const initialAppTheme = (): string =>
-  localStorage.getItem('theme') ??
-  (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const NOTICE_TIMEOUT_MS = 5000;
+const FLASH_TIMEOUT_MS = 1800;
+
+const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
 
 const initialDiagramTheme = (): 'modern' | 'lecture' =>
-  localStorage.getItem('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
+  storageGet('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
 
 /** Signal carried by a source handle: `proc.out.sig` or `sig.io.src`. */
 function handleSignal(handle: string): string | null {
@@ -192,21 +194,17 @@ export function App() {
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [showFlags, setShowFlags] = useState<ShowFlags>(() => {
-    try {
-      return { ...DEFAULT_FLAGS, ...JSON.parse(localStorage.getItem('showFlags') ?? '{}') };
-    } catch {
-      return DEFAULT_FLAGS;
-    }
-  });
+  const [showFlags, setShowFlags] = useState<ShowFlags>(() =>
+    storageGetJson('showFlags', DEFAULT_FLAGS),
+  );
   const [legendOpen, setLegendOpen] = useState(false);
-  useEffect(() => localStorage.setItem('showFlags', JSON.stringify(showFlags)), [showFlags]);
+  useEffect(() => storageSet('showFlags', JSON.stringify(showFlags)), [showFlags]);
 
   // transient toast for refused gestures
   const [notice, setNotice] = useState('');
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(''), 5000);
+    const t = setTimeout(() => setNotice(''), NOTICE_TIMEOUT_MS);
     return () => clearTimeout(t);
   }, [notice]);
 
@@ -234,7 +232,7 @@ export function App() {
   }
   useEffect(() => {
     if (!flash.length) return;
-    const t = setTimeout(() => setFlash([]), 1800);
+    const t = setTimeout(() => setFlash([]), FLASH_TIMEOUT_MS);
     return () => clearTimeout(t);
   }, [flash]);
   const [popover, setPopover] = useState<{ target: PopoverTarget; x: number; y: number } | null>(
@@ -244,9 +242,9 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', appTheme);
-    localStorage.setItem('theme', appTheme);
+    storageSet('theme', appTheme);
   }, [appTheme]);
-  useEffect(() => localStorage.setItem('diagramTheme', diagramTheme), [diagramTheme]);
+  useEffect(() => storageSet('diagramTheme', diagramTheme), [diagramTheme]);
 
   const loadExample = useCallback(
     (name: string) => {
@@ -281,7 +279,8 @@ export function App() {
     return true;
   }, []);
 
-  // splitter drag
+  // splitter drag; initial ratio read once (lazy state) for render stability
+  const [splitRatio] = useState(() => storageGet('splitRatio') ?? '45%');
   const panesRef = useRef<HTMLElement>(null);
   const onSplitterDown = (down: React.PointerEvent<HTMLDivElement>) => {
     const splitter = down.currentTarget;
@@ -297,7 +296,7 @@ export function App() {
       splitter.removeEventListener('pointermove', onMove);
       splitter.removeEventListener('pointerup', onUp);
       const v = panesRef.current?.style.getPropertyValue('--split');
-      if (v) localStorage.setItem('splitRatio', v);
+      if (v) storageSet('splitRatio', v);
     };
     splitter.addEventListener('pointermove', onMove);
     splitter.addEventListener('pointerup', onUp);
@@ -314,7 +313,7 @@ export function App() {
       const sig = handleSignal(sourceHandle);
       const parts = targetHandle.split('.');
       if (!sig || parts[1] !== 'in' || parts[2] !== '__new') return false;
-      return addInput(model.source, model.ir, parts[0]!, sig) !== null;
+      return addInput(model.ir, parts[0]!, sig) !== null;
     },
     [model],
   );
@@ -329,7 +328,7 @@ export function App() {
       const sig = handleSignal(sourceHandle);
       const proc = targetHandle.split('.')[0];
       if (!sig || !proc) return;
-      const splices = addInput(model.source, model.ir, proc, sig);
+      const splices = addInput(model.ir, proc, sig);
       if (splices) editorRef.current?.applySplices(splices);
     },
     [model],
@@ -428,7 +427,7 @@ export function App() {
       <main
         className="panes"
         ref={panesRef}
-        style={{ ['--split' as string]: localStorage.getItem('splitRatio') ?? '45%' }}
+        style={{ ['--split' as string]: splitRatio }}
       >
         <section className="pane editor-pane">
           <ErrorBar

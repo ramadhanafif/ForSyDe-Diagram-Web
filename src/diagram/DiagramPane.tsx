@@ -29,6 +29,14 @@ export interface DiagramCallbacks {
 
 const DND_TYPE = 'application/forsyde-node';
 
+/** Fit-to-view framing: padding fraction, zoom cap, and animation time. */
+const FIT_PADDING = 0.08;
+const FIT_MAX_ZOOM = 2;
+const FIT_DURATION_MS = 150;
+/** Zoom limits on the canvas. */
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 4;
+
 function edgeElementAt(x: number, y: number): Element | null {
   for (const el of document.elementsFromPoint(x, y)) {
     const g = el.closest?.('.react-flow__edge');
@@ -126,7 +134,7 @@ function Diagram(props: Props) {
     const pending = consumePendingFit();
     if (fitRequest !== handledFit.current || pending) {
       handledFit.current = fitRequest;
-      void fitView({ padding: 0.08, maxZoom: 2, duration: 150 });
+      void fitView({ padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM, duration: FIT_DURATION_MS });
     }
   }, [fitRequest, nodes, fitView, consumePendingFit]);
 
@@ -144,8 +152,8 @@ function Diagram(props: Props) {
       onNodesChange={onNodesChange}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
-      minZoom={0.1}
-      maxZoom={4}
+      minZoom={MIN_ZOOM}
+      maxZoom={MAX_ZOOM}
       nodesDraggable
       nodesConnectable
       elementsSelectable

@@ -129,7 +129,7 @@ describe('diagram edit operations', () => {
 
   it('deletes a 1-in-1-out process and rewires its consumer', () => {
     const ir = build(MODEL);
-    const { ir: ir2 } = roundTrip(MODEL, deleteProcess(MODEL, ir, 'd_d')!);
+    const { ir: ir2 } = roundTrip(MODEL, deleteProcess(ir, 'd_d')!);
     expect(ir2.processes.map((p) => p.name)).toEqual(['a_a', 'a_b']);
     expect(ir2.signals.some((s) => s.name === 's_1' && s.target.name === 'a_b')).toBe(true);
   });
@@ -139,7 +139,7 @@ describe('diagram edit operations', () => {
     const { splices, created } = insertOnEdge(MODEL, ir, edgeByName(ir, 's_1'), 'delay');
     const inserted = applySplices(MODEL, splices);
     const irIns = build(inserted);
-    const restored = applySplices(inserted, deleteProcess(inserted, irIns, created[0]!)!);
+    const restored = applySplices(inserted, deleteProcess(irIns, created[0]!)!);
     const irBack = build(restored);
     expect(irBack.processes.map((p) => p.name)).toEqual(ir.processes.map((p) => p.name));
     expect(irBack.signals.map((s) => [s.name, s.source.name, s.target.name])).toEqual(
@@ -150,7 +150,7 @@ describe('diagram edit operations', () => {
   it('adds an input to an actor from an unconsumed signal (drag-to-connect)', () => {
     // s_out is only a system output, so it may fan into a_a as a new input
     const ir = build(MODEL);
-    const splices = addInput(MODEL, ir, 'a_a', 's_out');
+    const splices = addInput(ir, 'a_a', 's_out');
     expect(splices).not.toBeNull();
     const { next, ir: ir2 } = roundTrip(MODEL, splices!);
     expect(next).toContain('a_a = actor21SDF (1, 1) 2 f');
@@ -160,13 +160,13 @@ describe('diagram edit operations', () => {
 
   it('adds a third input, extending an existing rate tuple', () => {
     const ir = build(MODEL);
-    const once = applySplices(MODEL, addInput(MODEL, ir, 'a_a', 's_out')!);
+    const once = applySplices(MODEL, addInput(ir, 'a_a', 's_out')!);
     const irOnce = build(once);
     // wire in a fresh system input as well
     const withInput = applySplices(once, addSourceActor(once, irOnce).splices);
     const ir2 = build(withInput);
     const freeSignal = ir2.outputs.find((o) => o !== 's_out')!;
-    const splices = addInput(withInput, ir2, 'a_a', freeSignal);
+    const splices = addInput(ir2, 'a_a', freeSignal);
     expect(splices).not.toBeNull();
     const { next } = roundTrip(withInput, splices!);
     expect(next).toMatch(/a_a = actor31SDF \(1, 1, 1\) 2 f/);
@@ -174,13 +174,13 @@ describe('diagram edit operations', () => {
 
   it('refuses invalid connect targets and sources', () => {
     const ir = build(MODEL);
-    expect(addInput(MODEL, ir, 'd_d', 's_out')).toBeNull(); // delay target
-    expect(addInput(MODEL, ir, 'a_a', 's_1')).toBeNull(); // s_1 already consumed by d_d
-    expect(addInput(MODEL, ir, 'a_b', 's_out')).toBeNull(); // self-loop: a_b produces s_out
-    expect(addInput(MODEL, ir, 'a_a', 's_ghost')).toBeNull(); // unknown signal
+    expect(addInput(ir, 'd_d', 's_out')).toBeNull(); // delay target
+    expect(addInput(ir, 'a_a', 's_1')).toBeNull(); // s_1 already consumed by d_d
+    expect(addInput(ir, 'a_b', 's_out')).toBeNull(); // self-loop: a_b produces s_out
+    expect(addInput(ir, 'a_a', 's_ghost')).toBeNull(); // unknown signal
     const eta = MODEL.replace('a_a = actor11SDF 1 2 f', 'a_a s = actor11SDF 1 2 f s');
     const irEta = build(eta);
-    expect(addInput(eta, irEta, 'a_a', 's_out')).toBeNull(); // eta-expanded spec
+    expect(addInput(irEta, 'a_a', 's_out')).toBeNull(); // eta-expanded spec
   });
 
   it('refuses to delete a multi-port process', () => {
@@ -193,6 +193,6 @@ describe('diagram edit operations', () => {
       .replace('s_out = a_b s_2', 's_out = a_b s_2\n    s_y = d_e s_x')
       .replace('d_d = delaySDF [0]', 'd_d = delaySDF [0]\nd_e = delaySDF [0]');
     const ir = build(src2);
-    expect(deleteProcess(src2, ir, 'a_a')).toBeNull();
+    expect(deleteProcess(ir, 'a_a')).toBeNull();
   });
 });

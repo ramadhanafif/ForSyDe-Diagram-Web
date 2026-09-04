@@ -1,17 +1,18 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { FlowNode } from './toFlow';
+import { splitSubscript } from './labels';
 
 /**
  * Identifier in math style: the part after the first underscore becomes a
  * subscript (s_in_1 -> s with subscript in,1).
  */
 export function MathLabel({ name }: { name: string }) {
-  const idx = name.indexOf('_');
-  if (idx <= 0 || idx === name.length - 1) return <>{name}</>;
+  const parts = splitSubscript(name);
+  if (!parts) return <>{name}</>;
   return (
     <>
-      {name.slice(0, idx)}
-      <sub>{name.slice(idx + 1).replace(/_/g, ',')}</sub>
+      {parts[0]}
+      <sub>{parts[1]}</sub>
     </>
   );
 }

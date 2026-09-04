@@ -212,10 +212,6 @@ export function elaborate(mod: HsModule): {
     return { ir: null, diagnostics: diags };
   }
 
-  const functions = [
-    ...new Set(processes.flatMap((p) => (isDelay(p) || p.function === 'NULL' ? [] : [p.function]))),
-  ].map((name) => ({ name }));
-
   const spans: SpanIndex = {
     processes: procSpans,
     signals: signalOccurrences,
@@ -234,7 +230,6 @@ export function elaborate(mod: HsModule): {
       outputs: sys.outputs.map((o) => o.name),
       processes,
       signals,
-      functions,
       spans,
     },
     diagnostics: diags,

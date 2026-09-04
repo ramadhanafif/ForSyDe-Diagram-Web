@@ -105,7 +105,5 @@ export interface HsModule {
   moduleName: string | null;
   system: SystemDecl | null;
   procSpecs: ProcSpec[];
-  /** Names of top-level bindings that are neither system nor process specs (functions etc.). */
-  otherBindings: string[];
   procSpecsEnd: number; // insertion offset for new process specs
 }

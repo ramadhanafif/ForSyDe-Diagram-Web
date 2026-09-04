@@ -26,6 +26,9 @@ export interface PipelineState {
   errorCount: number;
 }
 
+/** Keystroke quiet period before re-running parse -> elaborate -> layout. */
+const DEBOUNCE_MS = 250;
+
 const EMPTY: PipelineState = {
   diagnostics: [],
   model: null,
@@ -75,7 +78,7 @@ export function usePipeline(source: string): PipelineState {
           errorCount,
         });
       })();
-    }, 250);
+    }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [source]);
 

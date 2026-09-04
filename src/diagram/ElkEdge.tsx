@@ -1,5 +1,6 @@
 import { BaseEdge, type EdgeProps } from '@xyflow/react';
 import type { FlowEdge } from './toFlow';
+import { splitSubscript } from './labels';
 
 /** SVG math label: part after the first underscore becomes a subscript tspan. */
 function MathText({
@@ -8,20 +9,19 @@ function MathText({
   bufferTitle,
   ...attrs
 }: { name: string; suffix?: string; bufferTitle?: string } & React.SVGProps<SVGTextElement>) {
-  const idx = name.indexOf('_');
-  const plain = idx <= 0 || idx === name.length - 1;
+  const parts = splitSubscript(name);
   // the name lives in its own tspans so signal names and buffer sizes
   // can be shown or hidden independently; the buffer marker is doubled so
   // the lecture style keeps the terse dot and the modern style says "buf"
   return (
     <text {...attrs}>
-      {plain ? (
+      {!parts ? (
         <tspan className="sig-name">{name}</tspan>
       ) : (
         <>
-          <tspan className="sig-name">{name.slice(0, idx)}</tspan>
+          <tspan className="sig-name">{parts[0]}</tspan>
           <tspan className="sig-name" baselineShift="sub" fontSize="75%">
-            {name.slice(idx + 1).replace(/_/g, ',')}
+            {parts[1]}
           </tspan>
         </>
       )}
