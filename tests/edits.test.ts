@@ -40,7 +40,12 @@ function build(source: string): IRSystem {
   return ir!;
 }
 
-/** Apply an edit and re-elaborate; every op must leave the model valid. */
+/**
+ * Apply an edit and re-elaborate. Most ops must leave the model valid, but
+ * addInput intentionally leaves the actor function's arity stale (parse +
+ * elaborate stay clean; the body is opaque) — those tests assert the spec
+ * change, not a runnable function.
+ */
 function roundTrip(source: string, splices: { from: number; to: number; insert: string }[]) {
   const next = applySplices(source, splices);
   return { next, ir: build(next) };
@@ -105,10 +110,13 @@ describe('diagram edit operations', () => {
     expect(ir2.processes.find((p) => p.name === 'd_d')).toMatchObject({ tokens: [1, 2] });
   });
 
-  it('rejects invalid rate and name edits', () => {
+  it('rejects invalid rate, token and name edits', () => {
     const ir = build(MODEL);
     expect(setRates(ir, 'a_a', [0], [1])).toBeNull();
     expect(setRates(ir, 'a_a', [1, 1], [1])).toBeNull();
+    expect(setTokens(ir, 'd_d', [-1])).toBeNull();
+    expect(setTokens(ir, 'd_d', [1.5])).toBeNull();
+    expect(setTokens(ir, 'd_d', [0])).not.toBeNull(); // zero delay tokens are valid
     expect(renameProcess(MODEL, ir, 'a_a', 's_in')).toBeNull(); // taken
     expect(renameSignal(MODEL, ir, 's_1', '9bad')).toBeNull();
   });

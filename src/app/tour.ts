@@ -25,19 +25,27 @@ const steps = [
   },
 ];
 
+let driving = false;
+
 /** Start the tour; resolves when it is dismissed. Dynamic imports keep the css out of tests. */
 export async function startTour(onDone?: () => void): Promise<void> {
-  const { driver } = await import('driver.js');
-  await import('driver.js/dist/driver.css');
-  await new Promise<void>((resolve) => {
-    driver({
-      steps,
-      showProgress: true,
-      skipMissingElement: true,
-      onDestroyed: () => {
-        onDone?.();
-        resolve();
-      },
-    }).drive();
-  });
+  if (driving) return;
+  driving = true;
+  try {
+    const { driver } = await import('driver.js');
+    await import('driver.js/dist/driver.css');
+    await new Promise<void>((resolve) => {
+      driver({
+        steps,
+        showProgress: true,
+        skipMissingElement: true,
+        onDestroyed: () => {
+          onDone?.();
+          resolve();
+        },
+      }).drive();
+    });
+  } finally {
+    driving = false;
+  }
 }

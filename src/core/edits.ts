@@ -170,7 +170,7 @@ export function setFunction(ir: IRSystem, name: string, fn: string): Splice[] | 
 
 export function setTokens(ir: IRSystem, name: string, tokens: number[]): Splice[] | null {
   const spans = ir.spans.processes.get(name);
-  if (!spans?.tokens || tokens.some((t) => !Number.isInteger(t))) return null;
+  if (!spans?.tokens || tokens.some((t) => !Number.isInteger(t) || t < 0)) return null;
   return [replaceSpan(spans.tokens, `[${tokens.join(',')}]`)];
 }
 
@@ -202,8 +202,9 @@ export function renameSignal(
  * appends the signal to the actor's binding. Point-free specs only: an
  * eta-expanded spec would also need its params, application tail and type
  * signature rewritten.
- * ponytail: the actor's function is left untouched (bodies are opaque), so a
- * regenerated fixture would need a manual function-arity fix.
+ * ponytail: the actor's function is left untouched (bodies are opaque), so the
+ * function still takes the old arity — update its type signature and equations
+ * by hand after this edit (e.g. `f [x] = ...` gains a parameter per new input).
  */
 /** Maximum inputs on an actor: actorNMSDF only goes up to actor4NSDF. */
 const MAX_ACTOR_INPUTS = 4;

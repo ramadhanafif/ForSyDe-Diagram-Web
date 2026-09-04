@@ -12,6 +12,7 @@ import {
 import { isDelay, type IRProcess, type IRSignal } from '../core/ir';
 import type { ModelState } from '../app/usePipeline';
 import type { EditorApi } from '../editor/EditorPane';
+import { findDefinitionOffset } from './labels';
 
 export type PopoverTarget = { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string };
 
@@ -242,10 +243,10 @@ function NodeBody({
               onClick={() => {
                 const editor = editorRef.current;
                 if (!editor) return;
-                const m = new RegExp(`^${fn.trim()}\\b`, 'm').exec(editor.getDoc());
-                if (m) {
+                const at = findDefinitionOffset(editor.getDoc(), fn.trim());
+                if (at >= 0) {
                   onClose();
-                  editor.gotoOffset(m.index);
+                  editor.gotoOffset(at);
                 }
               }}
             >

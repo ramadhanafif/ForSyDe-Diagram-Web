@@ -164,6 +164,9 @@ function Diagram(props: Props) {
       nodesConnectable
       elementsSelectable
       edgesFocusable={false}
+      // deletion is source-driven (context menu / popover); Backspace must never
+      // mutate local flow selection state while the source stays unchanged
+      deleteKeyCode={null}
       onNodeClick={(ev, node) => {
         if (node.type !== 'io') props.onNodeClick(node.id, ev.clientX, ev.clientY);
       }}

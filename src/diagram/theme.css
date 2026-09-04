@@ -65,8 +65,10 @@ body {
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  row-gap: 6px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
@@ -79,8 +81,10 @@ body {
 
 .toolbar-items {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  row-gap: 6px;
 }
 
 .panes {

@@ -5,6 +5,7 @@ import { addInput, addInputError, addSourceActor, deleteProcess, insertOnEdge } 
 import { isDelay, type IRSystem } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
 import { Menu, menuItems, type MenuTarget } from '../diagram/ContextMenu';
+import { findDefinitionOffset } from '../diagram/labels';
 import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
@@ -242,6 +243,7 @@ export function App() {
   );
   const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number } | null>(null);
   const pendingFit = useRef(false);
+  const exportingRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', appTheme);
@@ -350,29 +352,48 @@ export function App() {
   // paint, so ancestor-scoped fill/stroke rules arrive blank at the rasterizer
   // (black nodes); pin the live values for the snapshot, then restore.
   const onExportPng = useCallback(() => {
+    if (exportingRef.current) {
+      setNotice('export in progress');
+      return;
+    }
     const el = paneRef.current;
     if (!el) {
       setNotice('nothing to export yet');
       return;
     }
+    exportingRef.current = true;
     const saved: Array<[CSSStyleDeclaration, string, string]> = [];
-    const pin = (selector: string, props: string[]) => {
-      el.querySelectorAll<SVGGraphicsElement>(selector).forEach((node) => {
-        const computed = getComputedStyle(node);
-        props.forEach((prop) => {
-          saved.push([node.style, prop, node.style.getPropertyValue(prop)]);
-          node.style.setProperty(prop, computed.getPropertyValue(prop));
-        });
-      });
+    const restore = () => {
+      for (const [style, prop, prior] of saved) {
+        if (prior) style.setProperty(prop, prior);
+        else style.removeProperty(prop);
+      }
     };
-    pin('circle.node-shape', ['fill', 'stroke']);
-    pin('.react-flow__edge-path', ['stroke']);
-    pin('#fsd-arrow .arrow-head', ['fill']);
+    try {
+      const pin = (selector: string, props: string[]) => {
+        el.querySelectorAll<SVGGraphicsElement>(selector).forEach((node) => {
+          const computed = getComputedStyle(node);
+          props.forEach((prop) => {
+            saved.push([node.style, prop, node.style.getPropertyValue(prop)]);
+            node.style.setProperty(prop, computed.getPropertyValue(prop));
+          });
+        });
+      };
+      pin('circle.node-shape', ['fill', 'stroke']);
+      pin('.react-flow__edge-path', ['stroke']);
+      pin('#fsd-arrow .arrow-head', ['fill']);
+    } catch {
+      restore();
+      exportingRef.current = false;
+      setNotice('export failed');
+      return;
+    }
     void toPng(el, {
       filter: (n) =>
         !(n instanceof Element) ||
         (!n.classList?.contains('react-flow__minimap') &&
           !n.classList?.contains('react-flow__controls') &&
+          !n.classList?.contains('react-flow__attribution') &&
           !n.classList?.contains('float-controls') &&
           !n.classList?.contains('legend') &&
           !n.classList?.contains('popover') &&
@@ -391,10 +412,8 @@ export function App() {
       })
       .catch(() => setNotice('export failed'))
       .finally(() => {
-        for (const [style, prop, prior] of saved) {
-          if (prior) style.setProperty(prop, prior);
-          else style.removeProperty(prop);
-        }
+        restore();
+        exportingRef.current = false;
       });
   }, []);
 
@@ -489,10 +508,10 @@ export function App() {
       if (action === 'goto-definition') {
         const fn = delay ? '' : p.function;
         if (!fn || fn === 'NULL') return;
-        const m = new RegExp(`^${fn}\\b`, 'm').exec(editor.getDoc());
-        if (m) {
+        const at = findDefinitionOffset(editor.getDoc(), fn);
+        if (at >= 0) {
           setMenu(null);
-          editor.gotoOffset(m.index);
+          editor.gotoOffset(at);
         }
         return;
       }
@@ -580,11 +599,13 @@ export function App() {
             consumePendingFit={consumePendingFit}
             onNodeClick={(id, cx, cy) => {
               if (!model?.ir.processes.some((q) => q.name === id)) return;
+              setMenu(null);
               setPopover({ target: { kind: 'node', name: id }, ...paneCoords(cx, cy) });
             }}
-            onEdgeClick={(edgeId, cx, cy) =>
-              setPopover({ target: { kind: 'edge', edgeId }, ...paneCoords(cx, cy) })
-            }
+            onEdgeClick={(edgeId, cx, cy) => {
+              setMenu(null);
+              setPopover({ target: { kind: 'edge', edgeId }, ...paneCoords(cx, cy) });
+            }}
             onPaneClick={() => {
               setPopover(null);
               setMenu(null);
