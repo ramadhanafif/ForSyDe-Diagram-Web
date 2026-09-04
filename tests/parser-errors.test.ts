@@ -60,6 +60,31 @@ describe('parser and elaborator diagnostics', () => {
     expect(errorsOf('module M where\nx = 1\n')).toContain('no-system');
   });
 
+  it('ignores a block comment spanning multiple lines', () => {
+    const src = `{- This is a\n   multiline comment\n   spanning several lines -}\n${MODEL}`;
+    expect(errorsOf(src)).toEqual([]);
+  });
+
+  it('ignores multiple block comments', () => {
+    const src = `{- Comment 1 -}\n{- Comment 2 -}\n${MODEL}`;
+    expect(errorsOf(src)).toEqual([]);
+  });
+
+  it('fails on a single-element tuple system output', () => {
+    // `(out)` parses as a parenthesized name, so elaboration fails: `out` has no producer.
+    const src = `actor1 = actor11SDF 1 1 f\nsystem = (out)\n`;
+    expect(errorsOf(src)).toContain('unknown-signal');
+  });
+
+  it('documents nested where-block behavior', () => {
+    // `where_inner` lexes as one identifier, so no `nested-where` here;
+    // elaboration still fails because `y` has no producer.
+    const src = `actor1 = actor11SDF 1 1 f\nsystem out = x where\n  where_inner = actor1 y\n`;
+    expect(errorsOf(src)).toContain('unknown-signal');
+    const nested = MODEL.replace('s_1 = a_a s_in', 's_1 = a_a s_in where');
+    expect(errorsOf(nested)).toContain('nested-where');
+  });
+
   it('caps explosive repetition vectors instead of freezing', () => {
     const src = `module M where
 import ForSyDe.Shallow
