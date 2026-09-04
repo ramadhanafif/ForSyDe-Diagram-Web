@@ -1,4 +1,5 @@
 import {
+  Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
@@ -208,6 +209,7 @@ function Diagram(props: Props) {
         zoomable
         nodeClassName={(n) => `mm-${n.type ?? 'io'}`}
       />
+      <Controls position="bottom-right" showInteractive={false} />
     </ReactFlow>
   );
 }

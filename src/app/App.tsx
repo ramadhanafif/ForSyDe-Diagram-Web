@@ -1,3 +1,4 @@
+import { toPng } from 'html-to-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
 import { addInput, addInputError, addSourceActor, insertOnEdge } from '../core/edits';
@@ -334,6 +335,32 @@ export function App() {
     [model],
   );
 
+  // ponytail: raster-only export; flow root (not viewport) so the arrow defs travel, chrome filtered
+  const onExportPng = useCallback(() => {
+    const el = paneRef.current?.querySelector('.react-flow') as HTMLElement | null;
+    if (!el) {
+      setNotice('nothing to export yet');
+      return;
+    }
+    void toPng(el, {
+      filter: (n) =>
+        !(n instanceof Element) ||
+        (!n.classList?.contains('react-flow__minimap') &&
+          !n.classList?.contains('react-flow__controls')),
+    })
+      .then((url) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'diagram.png';
+        a.click();
+      })
+      .catch(() => setNotice('export failed'));
+  }, []);
+
+  const onAddDelay = () => {
+    setNotice('a delay needs a signal: drag the delay chip onto an edge');
+  };
+
   const onAddActor = () => {
     if (!model) return;
     if (editorRef.current?.getDoc() !== model.source) {
@@ -392,6 +419,8 @@ export function App() {
         showSchedule={showSchedule}
         onToggleSchedule={() => setShowSchedule((v) => !v)}
         onAddActor={onAddActor}
+        onAddDelay={onAddDelay}
+        onExportPng={onExportPng}
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
         onToggleAppTheme={() => setAppTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
