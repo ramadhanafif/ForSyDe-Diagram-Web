@@ -91,9 +91,10 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
     gotoOffset(offset) {
       const v = view.current;
       if (!v) return;
+      const at = Math.min(Math.max(offset, 0), v.state.doc.length);
       v.dispatch({
-        selection: { anchor: offset },
-        effects: EditorView.scrollIntoView(offset, { y: 'center' }),
+        selection: { anchor: at },
+        effects: EditorView.scrollIntoView(at, { y: 'center' }),
       });
       v.focus();
     },

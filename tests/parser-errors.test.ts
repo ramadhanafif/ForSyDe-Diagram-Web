@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { layoutFailed, orderDiagnostics, type Diagnostic } from '../src/core/ast';
 import { elaborate } from '../src/core/elaborate';
 import { parse } from '../src/core/parser';
 import { computeScheduleAndBuffers } from '../src/core/schedule';
@@ -103,5 +104,37 @@ a_c = actor11SDF 1000 1 f
     const r = computeScheduleAndBuffers(ir!);
     expect(!r.ok && r.kind).toBe('invalid-graph');
     expect(!r.ok && r.message).toMatch(/too large/);
+  });
+});
+
+describe('find-my-errors helpers', () => {
+  const diag = (severity: 'error' | 'warning', from: number): Diagnostic => ({
+    severity,
+    code: 'x',
+    message: 'm',
+    span: { from, to: from + 1 },
+  });
+
+  it('orders errors first, then by offset', () => {
+    const inOrder = [diag('warning', 1), diag('error', 9), diag('error', 2), diag('warning', 0)];
+    expect(orderDiagnostics(inOrder).map((d) => [d.severity, d.span.from])).toEqual([
+      ['error', 2],
+      ['error', 9],
+      ['warning', 0],
+      ['warning', 1],
+    ]);
+  });
+
+  it('does not mutate the input array', () => {
+    const diags = [diag('warning', 1), diag('error', 9)];
+    orderDiagnostics(diags);
+    expect(diags.map((d) => d.span.from)).toEqual([1, 9]);
+  });
+
+  it('formats a layout-failed error diagnostic', () => {
+    const d = layoutFailed(new Error('boom'));
+    expect(d.severity).toBe('error');
+    expect(d.code).toBe('layout-failed');
+    expect(d.message).toMatch(/boom/);
   });
 });

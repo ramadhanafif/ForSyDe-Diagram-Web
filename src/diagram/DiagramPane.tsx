@@ -265,6 +265,14 @@ export function DiagramPane(props: Props) {
       <ReactFlowProvider>
         <Diagram {...props} />
       </ReactFlowProvider>
+      {!props.dg && (
+        <div className="empty-canvas">
+          <div className="empty-title">No diagram yet</div>
+          <div className="empty-hint">
+            Fix the errors listed above the editor, or load an example from the toolbar.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

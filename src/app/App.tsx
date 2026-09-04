@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { orderDiagnostics, type Diagnostic } from '../core/ast';
 import { addInput, addInputError, addSourceActor, insertOnEdge } from '../core/edits';
 import type { IRSystem } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
@@ -116,6 +117,31 @@ function Legend() {
         <span className="legend-swatch swatch-newinput" />
         <span>drop target: drag a signal here to add an input</span>
       </div>
+    </div>
+  );
+}
+
+/** Clickable list of diagnostics, errors first; click jumps the cursor to the span. */
+function ErrorBar({
+  diagnostics,
+  onGoto,
+}: {
+  diagnostics: Diagnostic[];
+  onGoto(offset: number): void;
+}) {
+  if (!diagnostics.length) return null;
+  return (
+    <div className="error-bar">
+      {orderDiagnostics(diagnostics).map((d, i) => (
+        <button
+          key={i}
+          className={d.severity === 'error' ? 'err' : 'warn'}
+          title="Jump to this diagnostic"
+          onClick={() => onGoto(d.span.from)}
+        >
+          {d.message}
+        </button>
+      ))}
     </div>
   );
 }
@@ -376,6 +402,10 @@ export function App() {
         style={{ ['--split' as string]: localStorage.getItem('splitRatio') ?? '45%' }}
       >
         <section className="pane editor-pane">
+          <ErrorBar
+            diagnostics={pipe.diagnostics}
+            onGoto={(offset) => editorRef.current?.gotoOffset(offset)}
+          />
           <EditorPane ref={editorRef} onChange={setSource} diagnostics={pipe.diagnostics} />
         </section>
         <div

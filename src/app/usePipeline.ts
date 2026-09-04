@@ -1,6 +1,6 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { useEffect, useRef, useState } from 'react';
-import type { Diagnostic } from '../core/ast';
+import { layoutFailed, type Diagnostic } from '../core/ast';
 import { elaborate } from '../core/elaborate';
 import type { IRSystem } from '../core/ir';
 import { parse } from '../core/parser';
@@ -54,7 +54,18 @@ export function usePipeline(source: string): PipelineState {
         }
         const schedule = computeScheduleAndBuffers(ir);
         const dg = buildElkGraph(ir, schedule);
-        dg.graph = await elk.layout(dg.graph);
+        try {
+          dg.graph = await elk.layout(dg.graph);
+        } catch (err) {
+          if (gen === generation.current)
+            setState((s) => ({
+              ...s,
+              diagnostics: [...allDiags, layoutFailed(err)],
+              stale: true,
+              errorCount: errorCount + 1,
+            }));
+          return;
+        }
         if (gen !== generation.current) return;
         setState({
           diagnostics: allDiags,
