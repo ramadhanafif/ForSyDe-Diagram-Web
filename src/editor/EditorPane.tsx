@@ -1,5 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { StreamLanguage } from '@codemirror/language';
+import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
@@ -30,6 +31,18 @@ export interface EditorApi {
  * throws "Duplicate use of compartment").
  */
 const schemeCompartment = new Compartment();
+
+/**
+ * Token colors for the Haskell mode. Colors reference the app CSS variables
+ * so the light/dark toggle recolors tokens with no CodeMirror reconfigure.
+ */
+export const haskellHighlight = HighlightStyle.define([
+  { tag: tags.keyword, color: 'var(--accent)' },
+  { tag: tags.comment, color: 'var(--fg-dim)', fontStyle: 'italic' },
+  { tag: tags.string, color: 'var(--buffer-fg)' },
+  { tag: tags.number, color: 'var(--rate-fg)' },
+  { tag: tags.typeName, color: 'var(--rate-fg)' },
+]);
 
 /** CodeMirror-side theme, mirroring the app `data-theme` toggle. */
 export function schemeExtension(dark: boolean): Extension {
@@ -63,6 +76,7 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
       keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap]),
       highlightSelectionMatches(),
       StreamLanguage.define(haskell),
+      syntaxHighlighting(haskellHighlight),
       lintGutter(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChangeRef.current(update.state.doc.toString());
