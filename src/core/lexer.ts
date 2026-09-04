@@ -1,6 +1,6 @@
 import type { Span } from './ast';
 
-export type TokenKind = 'ident' | 'int' | 'punct' | 'op';
+export type TokenKind = 'ident' | 'int' | 'float' | 'punct' | 'op';
 
 export interface Token {
   kind: TokenKind;
@@ -41,19 +41,31 @@ export function tokenize(source: string, offset = 0, end = source.length): Token
       tokens.push({ kind: 'ident', text: source.slice(start, i), span: { from: start, to: i } });
       continue;
     }
+    // Consume an optional `digits.digits` fraction after a digit run.
+    // Returns true when a fraction was consumed (the literal is a float).
+    const consumeFraction = (): boolean => {
+      if (source[i] === '.' && /[0-9]/.test(source[i + 1] ?? '')) {
+        i++; // the '.'
+        while (i < end && /[0-9]/.test(source[i]!)) i++;
+        return true;
+      }
+      return false;
+    };
     if (/[0-9]/.test(c)) {
       const start = i;
       while (i < end && /[0-9]/.test(source[i]!)) i++;
-      tokens.push({ kind: 'int', text: source.slice(start, i), span: { from: start, to: i } });
+      const kind = consumeFraction() ? 'float' : 'int';
+      tokens.push({ kind, text: source.slice(start, i), span: { from: start, to: i } });
       continue;
     }
-    // negative integer literal (only valid where a literal is expected;
+    // negative numeric literal (only valid where a literal is expected;
     // the parser decides, the lexer just glues '-' to digits)
     if (c === '-' && /[0-9]/.test(source[i + 1] ?? '')) {
       const start = i;
       i++;
       while (i < end && /[0-9]/.test(source[i]!)) i++;
-      tokens.push({ kind: 'int', text: source.slice(start, i), span: { from: start, to: i } });
+      const kind = consumeFraction() ? 'float' : 'int';
+      tokens.push({ kind, text: source.slice(start, i), span: { from: start, to: i } });
       continue;
     }
     if ('()[],='.includes(c)) {

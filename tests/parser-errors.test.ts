@@ -52,6 +52,32 @@ describe('parser and elaborator diagnostics', () => {
     expect(errorsOf(src)).toContain('bad-rate');
   });
 
+  it('rejects float rates', () => {
+    const src = MODEL.replace('a_a = actor11SDF 1 1 f', 'a_a = actor11SDF 1.5 1 f');
+    expect(errorsOf(src)).toContain('bad-rate');
+  });
+
+  it('accepts float delay tokens', () => {
+    const src = `module M where
+import ForSyDe.Shallow
+system s_in = s_out
+  where
+    s_1 = a_a s_in
+    s_2 = d_d s_1
+    s_out = a_b s_2
+a_a = actor11SDF 1 1 f
+a_b = actor11SDF 1 1 f
+d_d = delaySDF [0.5, -1.25]
+`;
+    expect(errorsOf(src)).toEqual([]);
+    const { module: mod } = parse(src);
+    const { ir } = elaborate(mod);
+    expect(ir!.processes.find((p) => p.name === 'd_d')).toMatchObject({ tokens: [0.5, -1.25] });
+    // scheduling counts initial tokens, never their values
+    const r = computeScheduleAndBuffers(ir!);
+    expect(r.ok).toBe(true);
+  });
+
   it('rejects unknown processes and signals', () => {
     expect(errorsOf(MODEL.replace('a_b s_1', 'nope s_1'))).toContain('unknown-process');
     expect(errorsOf(MODEL.replace('a_b s_1', 'a_b s_ghost'))).toContain('unknown-signal');

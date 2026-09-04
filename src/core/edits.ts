@@ -170,7 +170,7 @@ export function setFunction(ir: IRSystem, name: string, fn: string): Splice[] | 
 
 export function setTokens(ir: IRSystem, name: string, tokens: number[]): Splice[] | null {
   const spans = ir.spans.processes.get(name);
-  if (!spans?.tokens || tokens.some((t) => !Number.isInteger(t) || t < 0)) return null;
+  if (!spans?.tokens || tokens.some((t) => !Number.isFinite(t) || t < 0)) return null;
   return [replaceSpan(spans.tokens, `[${tokens.join(',')}]`)];
 }
 

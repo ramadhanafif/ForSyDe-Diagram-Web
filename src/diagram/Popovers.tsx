@@ -34,6 +34,13 @@ function parseInts(text: string): number[] | null {
   return parts.map(Number);
 }
 
+/** Delay initial tokens: non-negative numbers, floats allowed. */
+function parseTokens(text: string): number[] | null {
+  const parts = text.split(',').map((t) => t.trim());
+  if (parts.some((p) => !/^-?\d+(\.\d+)?$/.test(p))) return null;
+  return parts.map(Number);
+}
+
 export function EditPopover({ target, x, y, model, editorRef, onClose }: Props) {
   const [error, setError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -163,8 +170,8 @@ function NodeBody({
   const buildSplices = (): { splices: Splice[]; error?: string } => {
     const all: Splice[] = [];
     if (delay) {
-      const t = parseInts(tokens);
-      if (!t) return { splices: [], error: 'tokens must be integers' };
+      const t = parseTokens(tokens);
+      if (!t) return { splices: [], error: 'tokens must be numbers' };
       if (t.join(',') !== p.tokens.join(',')) {
         const s = setTokens(model.ir, p.name, t);
         if (!s) return { splices: [], error: 'invalid tokens' };

@@ -115,8 +115,9 @@ describe('diagram edit operations', () => {
     expect(setRates(ir, 'a_a', [0], [1])).toBeNull();
     expect(setRates(ir, 'a_a', [1, 1], [1])).toBeNull();
     expect(setTokens(ir, 'd_d', [-1])).toBeNull();
-    expect(setTokens(ir, 'd_d', [1.5])).toBeNull();
+    expect(setTokens(ir, 'd_d', [-0.5])).toBeNull();
     expect(setTokens(ir, 'd_d', [0])).not.toBeNull(); // zero delay tokens are valid
+    expect(setTokens(ir, 'd_d', [1.5])).not.toBeNull(); // float delay tokens are valid
     expect(renameProcess(MODEL, ir, 'a_a', 's_in')).toBeNull(); // taken
     expect(renameSignal(MODEL, ir, 's_1', '9bad')).toBeNull();
   });

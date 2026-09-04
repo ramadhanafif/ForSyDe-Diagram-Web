@@ -92,19 +92,20 @@ function parseIdentOrTuple(c: Cursor): Ident[] | null {
   return null;
 }
 
-/** Parse a rate argument: bare int or tuple of ints. */
+/** Parse a rate argument: bare int or tuple of ints. Floats are consumed so
+ * the bad-rate check below can reject them with a clear message. */
 function parseRates(c: Cursor): RateLit[] | null {
   const t = c.peek();
-  if (t?.kind === 'int') {
+  if (t?.kind === 'int' || t?.kind === 'float') {
     c.next();
-    return [{ value: parseInt(t.text, 10), span: t.span }];
+    return [{ value: Number(t.text), span: t.span }];
   }
   if (c.atPunct('(')) {
     c.next();
     const rates: RateLit[] = [];
-    while (c.peek()?.kind === 'int') {
+    while (c.peek()?.kind === 'int' || c.peek()?.kind === 'float') {
       const tok = c.next()!;
-      rates.push({ value: parseInt(tok.text, 10), span: tok.span });
+      rates.push({ value: Number(tok.text), span: tok.span });
       if (!c.expectPunct(',')) break;
     }
     if (!c.expectPunct(')') || rates.length === 0) return null;
@@ -123,7 +124,7 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
     const outRates = parseRates(c);
     const fnTok = c.atIdent() ? c.next()! : null;
     for (const r of [...(inRates ?? []), ...(outRates ?? [])]) {
-      if (r.value < 1) {
+      if (!Number.isInteger(r.value) || r.value < 1) {
         diags.push({
           severity: 'error',
           code: 'bad-rate',
@@ -158,8 +159,8 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
     const open = c.expectPunct('[');
     const tokens: number[] = [];
     if (open) {
-      while (c.peek()?.kind === 'int') {
-        tokens.push(parseInt(c.next()!.text, 10));
+      while (c.peek()?.kind === 'int' || c.peek()?.kind === 'float') {
+        tokens.push(Number(c.next()!.text));
         if (!c.expectPunct(',')) break;
       }
     }
