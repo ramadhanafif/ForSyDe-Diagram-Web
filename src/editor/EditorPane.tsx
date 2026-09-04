@@ -2,8 +2,8 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { StreamLanguage } from '@codemirror/language';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers } from '@codemirror/view';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import { drawSelection, EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { haskell } from '@codemirror/legacy-modes/mode/haskell';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { Diagnostic } from '../core/ast';
@@ -20,13 +20,30 @@ export interface EditorApi {
   getDoc(): string;
 }
 
+/**
+ * Reconfigured on app-theme toggle so CodeMirror's own `&dark` styles kick
+ * in. Only the dark flag goes in the compartment — drawSelection() lives at
+ * top level so reconfiguring the flag never disturbs the cursor layer.
+ * NOTE: this returns the raw extension; callers wrap it with
+ * `schemeCompartment.of(...)` when mounting, and pass it bare to
+ * `schemeCompartment.reconfigure(...)` (nesting `.of()` inside reconfigure
+ * throws "Duplicate use of compartment").
+ */
+const schemeCompartment = new Compartment();
+
+/** CodeMirror-side theme, mirroring the app `data-theme` toggle. */
+export function schemeExtension(dark: boolean): Extension {
+  return EditorView.theme({}, { dark });
+}
+
 interface Props {
   onChange(source: string): void;
   diagnostics: Diagnostic[];
+  dark: boolean;
 }
 
 export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
-  { onChange, diagnostics },
+  { onChange, diagnostics, dark },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -34,8 +51,13 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  const darkRef = useRef(dark);
+  darkRef.current = dark;
+
   useEffect(() => {
-    const extensions = [
+    // base extensions are stable and reusable across setSource() states;
+    // the scheme compartment instance is created fresh per state instead
+    const baseExtensions = [
       lineNumbers(),
       history(),
       keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap]),
@@ -49,12 +71,25 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
     ];
     const v = new EditorView({
       parent: host.current!,
-      state: EditorState.create({ extensions }),
+      state: EditorState.create({
+        extensions: [
+          ...baseExtensions,
+          schemeCompartment.of(schemeExtension(darkRef.current)),
+          drawSelection({ cursorBlinkRate: 1200 }),
+        ],
+      }),
     });
     view.current = v;
-    (v as EditorView & { fsdExtensions?: unknown[] }).fsdExtensions = extensions;
+    (v as EditorView & { fsdBaseExtensions?: unknown[] }).fsdBaseExtensions = baseExtensions;
     return () => v.destroy();
   }, []);
+
+  // follow the app theme toggle without rebuilding the editor: the scheme
+  // compartment flips CodeMirror's `cm-light`/`cm-dark` class, which its own
+  // base styles (`&dark .cm-cursor`, `&dark .cm-content` caret-color, ...) key on
+  useEffect(() => {
+    view.current?.dispatch({ effects: schemeCompartment.reconfigure(schemeExtension(dark)) });
+  }, [dark]);
 
   // push diagnostics into the editor as soon as the pipeline produces them;
   // a pull-based linter() only refreshes on doc changes, which made squiggles
@@ -80,9 +115,20 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
     setSource(source) {
       const v = view.current;
       if (!v) return;
-      const extensions = (v as EditorView & { fsdExtensions?: unknown[] }).fsdExtensions ?? [];
-      // fresh state so the example load is not part of the undo history
-      v.setState(EditorState.create({ doc: source, extensions: extensions as never }));
+      // fresh state so the example load is not part of the undo history;
+      // base extensions (without the scheme compartment instance, which
+      // cannot be reused across states) are rebuilt with the current theme
+      const stored = (v as EditorView & { fsdBaseExtensions?: unknown[] }).fsdBaseExtensions ?? [];
+      v.setState(
+        EditorState.create({
+          doc: source,
+          extensions: [
+            ...(stored as Extension[]),
+            schemeCompartment.of(schemeExtension(darkRef.current)),
+            drawSelection({ cursorBlinkRate: 1200 }),
+          ],
+        }),
+      );
       onChangeRef.current(source);
     },
     applySplices(splices) {
