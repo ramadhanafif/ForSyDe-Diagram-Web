@@ -578,7 +578,12 @@ export function App() {
             diagnostics={pipe.diagnostics}
             onGoto={(offset) => editorRef.current?.gotoOffset(offset)}
           />
-          <EditorPane ref={editorRef} onChange={setSource} diagnostics={pipe.diagnostics} />
+          <EditorPane
+            ref={editorRef}
+            onChange={setSource}
+            diagnostics={pipe.diagnostics}
+            dark={appTheme === 'dark'}
+          />
         </section>
         <div
           className="splitter"
