@@ -125,8 +125,13 @@ export function outputRenames(ir: IRSystem, splices: Splice[]): [string, string]
   for (const s of ir.signals) {
     if (s.target.name !== s.name || !ir.outputs.includes(s.name)) continue;
     const hit = splices.find((x) => x.from === s.targetSpan.from && x.to === s.targetSpan.to);
-    if (hit && hit.insert !== s.name && /^[A-Za-z_][A-Za-z0-9_']*$/.test(hit.insert))
-      out.push([s.name, hit.insert]);
+    if (!hit || hit.insert === s.name || !/^[A-Za-z_][A-Za-z0-9_']*$/.test(hit.insert)) continue;
+    // an existing node id (a system input fed straight through) keeps its own spot
+    const isNode =
+      ir.inputs.includes(hit.insert) ||
+      ir.outputs.includes(hit.insert) ||
+      ir.processes.some((p) => p.name === hit.insert);
+    if (!isNode) out.push([s.name, hit.insert]);
   }
   return out;
 }

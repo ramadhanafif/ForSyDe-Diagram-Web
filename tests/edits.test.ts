@@ -154,6 +154,20 @@ describe('diagram edit operations', () => {
     ).toEqual([]);
   });
 
+  it('does not rename an output onto an existing node id', () => {
+    const pass = `module M where
+import ForSyDe.Shallow
+system s_in = s_out
+  where
+    s_out = a_1 s_in
+a_1 = actor11SDF 1 1 f
+f :: [Int] -> [Int]
+f [x] = [x]
+`;
+    const ir = build(pass);
+    expect(outputRenames(ir, deleteProcess(ir, 'a_1')!)).toEqual([]);
+  });
+
   it('insert-then-delete restores the original wiring', () => {
     const ir = build(MODEL);
     const { splices, created } = insertOnEdge(MODEL, ir, edgeByName(ir, 's_1'), 'delay');

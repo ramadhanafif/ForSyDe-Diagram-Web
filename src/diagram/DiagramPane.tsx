@@ -31,7 +31,7 @@ export interface DiagramCallbacks {
   isValidConnection(sourceHandle: string, targetHandle: string): boolean;
   /** Palette chip dropped: on an edge (its id) or on empty canvas (null), at a flow point. */
   onDropInsert(kind: 'actor' | 'delay', edgeId: string | null, at: Point): void;
-  /** A node drag ended: every node's current position, which pins the layout. */
+  /** A node move landed (drag or arrow key): every node's position, which pins the layout. */
   onPin(positions: Map<string, Point>): void;
   /** A connection gesture ended on a handle but was refused. */
   onConnectRefused(sourceHandle: string, targetHandle: string): void;
@@ -43,6 +43,8 @@ const DND_TYPE = 'application/forsyde-node';
 const FIT_PADDING = 0.08;
 const FIT_MAX_ZOOM = 2;
 const FIT_DURATION_MS = 150;
+/** Pointer travel (px) below which a press on a node is a click, not a drag. */
+const DRAG_THRESHOLD_PX = 4;
 /** Zoom limits on the canvas. */
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
@@ -117,11 +119,15 @@ function Diagram(props: Props) {
   useEffect(() => {
     // a reset mid-drag would snap the dragged node back; drag stop re-runs this
     if (dragging) return;
-    setNodes(
-      flash.length
-        ? computed.nodes.map((n) => (flash.includes(n.id) ? { ...n, className: 'just-added' } : n))
-        : computed.nodes,
-    );
+    // carry selection over, so Enter-to-edit and group re-drag survive a pin
+    setNodes((prev) => {
+      const selected = new Set(prev.filter((n) => n.selected).map((n) => n.id));
+      return computed.nodes.map((n) => ({
+        ...n,
+        selected: selected.has(n.id),
+        ...(flash.includes(n.id) ? { className: 'just-added' } : {}),
+      }));
+    });
   }, [computed, setNodes, flash, dragging]);
 
   const edges: FlowEdge[] = useMemo(
@@ -162,7 +168,24 @@ function Diagram(props: Props) {
         .join(' ')}
       nodes={nodes}
       edges={edges}
-      onNodesChange={onNodesChange}
+      onNodesChange={(changes) => {
+        onNodesChange(changes);
+        // a move lands (drag or selection-box drag end, arrow-key nudge): pin everything
+        const moved = new Map<string, Point>();
+        for (const c of changes) {
+          if (c.type === 'position' && c.dragging === false && c.position)
+            moved.set(c.id, c.position);
+        }
+        if (!moved.size) return;
+        const rounded = new Map<string, Point>();
+        for (const n of nodes) {
+          const p = moved.get(n.id) ?? n.position;
+          rounded.set(n.id, { x: Math.round(p.x), y: Math.round(p.y) });
+        }
+        props.onPin(rounded);
+      }}
+      nodeDragThreshold={DRAG_THRESHOLD_PX}
+      nodeClickDistance={DRAG_THRESHOLD_PX}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       minZoom={MIN_ZOOM}
@@ -177,16 +200,9 @@ function Diagram(props: Props) {
       onNodeClick={(ev, node) => {
         if (node.type !== 'io') props.onNodeClick(node.id, ev.clientX, ev.clientY);
       }}
+      // also fired for a selection-box drag; the pin comes from onNodesChange
       onNodeDragStart={() => setDragging(true)}
-      onNodeDragStop={(_ev, _node, dragged) => {
-        // pin everything, taking the dragged nodes' final positions from the event
-        const at = new Map(nodes.map((n) => [n.id, n.position]));
-        for (const n of dragged) at.set(n.id, n.position);
-        const rounded = new Map<string, Point>();
-        for (const [id, p] of at) rounded.set(id, { x: Math.round(p.x), y: Math.round(p.y) });
-        setDragging(false);
-        props.onPin(rounded);
-      }}
+      onNodeDragStop={() => setDragging(false)}
       onEdgeClick={(ev, edge: Edge) => props.onEdgeClick(edge.id, ev.clientX, ev.clientY)}
       onPaneClick={() => props.onPaneClick()}
       onConnect={(c: Connection) => {

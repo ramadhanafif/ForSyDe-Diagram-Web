@@ -406,6 +406,7 @@ export function App() {
       const same = m?.source === text;
       setExample(from);
       if (m && !same) setHeldPositions((h) => h ?? positions);
+      else setHeldPositions(null);
       setPositions(m && same && pos.size ? placeModel(m, pos, new Map()) : pos);
       setPopover(null);
       setMenu(null);
@@ -850,10 +851,11 @@ export function App() {
             flash={flash}
             positions={heldPositions ?? positions}
             onPin={(pinned) => {
-              // merge: ids off screen (a stale diagram after Open) keep their spot
+              // a held diagram belongs to the replaced document: pin into its map and
+              // leave the new document's positions alone until its model arrives
               layoutEditedRef.current = true;
-              setHeldPositions(null);
-              setPositions((p) => new Map([...p, ...pinned]));
+              if (heldPositions) setHeldPositions((h) => h && new Map([...h, ...pinned]));
+              else setPositions((p) => new Map([...p, ...pinned]));
             }}
           />
           <div className="float-controls">
