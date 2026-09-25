@@ -1,8 +1,5 @@
-/** Top-left corner of a node in flow coordinates. */
-export interface Point {
-  x: number;
-  y: number;
-}
+import type { Point } from '../core/layoutBlock';
+import { LAYER_SPACING, NODE_SPACING } from './toElk';
 
 /** An elk-laid-out node: the only geometry placement needs. */
 export interface PlacedBox {
@@ -19,19 +16,15 @@ export interface SignalLink {
   target: { name: string };
 }
 
-/** Horizontal gap right of a producer; matches elk's LAYER_SPACING. */
-const LAYER_GAP = 64;
-/** Vertical gap when stepping down past a node; matches elk's NODE_SPACING. */
-const NODE_GAP = 44;
-
 function overlaps(a: PlacedBox, b: PlacedBox): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
 /**
  * Final positions for pinned mode. Per node: stored position, else the hint
- * (a gesture's desired center), else right of a placed producer (stepped down
- * past overlaps), else below the lowest placed node at the leftmost x. Nodes
+ * (a gesture's desired center), else right of a placed producer, else below
+ * the lowest placed node at the leftmost x. Hinted and producer-placed nodes
+ * step down past overlaps. Only ids in `elkNodes` are returned. Nodes
  * with a placed producer resolve first; a cycle with nothing placed falls
  * back to the first unresolved node in elk order.
  */
@@ -45,12 +38,17 @@ export function placeNodes(
   const put = (n: PlacedBox, p: Point) => placed.set(n.id, { ...n, ...p });
 
   const pending: PlacedBox[] = [];
+  const hinted: PlacedBox[] = [];
   for (const n of elkNodes) {
     const stored = positions.get(n.id);
-    const hint = hints.get(n.id);
     if (stored) put(n, stored);
-    else if (hint) put(n, { x: hint.x - n.width / 2, y: hint.y - n.height / 2 });
+    else if (hints.has(n.id)) hinted.push(n);
     else pending.push(n);
+  }
+  // after every stored node, so a hint on an edge midpoint clears both neighbours
+  for (const n of hinted) {
+    const hint = hints.get(n.id)!;
+    put(n, stepDown({ ...n, x: hint.x - n.width / 2, y: hint.y - n.height / 2 }, placed));
   }
 
   const producerOf = (id: string): PlacedBox | undefined => {
@@ -70,19 +68,15 @@ export function placeNodes(
     if (producer) {
       const box = {
         ...n,
-        x: producer.x + producer.width + LAYER_GAP,
+        x: producer.x + producer.width + LAYER_SPACING,
         y: producer.y + producer.height / 2 - n.height / 2,
       };
-      // each step moves strictly below a blocker, so this terminates
-      for (let hit = firstHit(box, placed); hit; hit = firstHit(box, placed)) {
-        box.y = hit.y + hit.height + NODE_GAP;
-      }
-      put(n, box);
+      put(n, stepDown(box, placed));
     } else if (placed.size > 0) {
       const boxes = [...placed.values()];
       put(n, {
         x: Math.min(...boxes.map((b) => b.x)),
-        y: Math.max(...boxes.map((b) => b.y + b.height)) + NODE_GAP,
+        y: Math.max(...boxes.map((b) => b.y + b.height)) + NODE_SPACING,
       });
     } else {
       put(n, { x: n.x, y: n.y });
@@ -97,6 +91,15 @@ export function placeNodes(
 function firstHit(box: PlacedBox, placed: Map<string, PlacedBox>): PlacedBox | undefined {
   for (const b of placed.values()) if (overlaps(box, b)) return b;
   return undefined;
+}
+
+/** Move `box` down until it overlaps nothing placed; returns its top-left. */
+function stepDown(box: PlacedBox, placed: Map<string, PlacedBox>): Point {
+  // each step moves strictly below a blocker, so this terminates
+  for (let hit = firstHit(box, placed); hit; hit = firstHit(box, placed)) {
+    box.y = hit.y + hit.height + NODE_SPACING;
+  }
+  return { x: box.x, y: box.y };
 }
 
 /** Carry a position over a rename; returns a new map, input untouched. */

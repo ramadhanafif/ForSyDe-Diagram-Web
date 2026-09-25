@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import {
   deleteProcess,
   insertOnEdge,
+  outputRenames,
   renameProcess,
   renameSignal,
   setFunction,
@@ -158,6 +159,7 @@ function EdgeBody({
     apply(() => {
       const r = insertOnEdge(model.source, model.ir, sig, kind);
       onInserted(r.created[0]!);
+      for (const [a, b] of outputRenames(model.ir, r.splices)) onRenamed(a, b);
       return r.splices;
     });
   return (
@@ -329,11 +331,12 @@ function NodeBody({
               return;
             }
             setConfirmDelete('');
-            apply(
-              () =>
-                deleteProcess(model.ir, p.name) ??
-                'only single-input single-output processes can be deleted here',
-            );
+            apply(() => {
+              const splices = deleteProcess(model.ir, p.name);
+              if (!splices) return 'only single-input single-output processes can be deleted here';
+              for (const [a, b] of outputRenames(model.ir, splices)) onRenamed(a, b);
+              return splices;
+            });
           }}
         >
           {armed ? 'confirm delete?' : 'delete'}

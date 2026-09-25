@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { elaborate } from '../src/core/elaborate';
 import { parse } from '../src/core/parser';
 import { BLANK_MODEL, exportFileName } from '../src/app/files';
-import { storageGetPositions } from '../src/app/storage';
+import { storageGetWorkingCopy, storageSetWorkingCopy } from '../src/app/storage';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -30,17 +30,37 @@ describe('exportFileName', () => {
   });
 });
 
-describe('storageGetPositions', () => {
-  it('keeps well-formed entries and drops the rest', () => {
+describe('working copy storage', () => {
+  it('round-trips source, baseline, example and positions under one key', () => {
+    const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {
-      getItem: () => '{"a":{"x":1,"y":2},"b":{"x":"no","y":0},"c":5}',
-      setItem: () => {},
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
     });
-    expect(storageGetPositions('positions')).toEqual(new Map([['a', { x: 1, y: 2 }]]));
+    const wc = {
+      source: 's',
+      baseline: 'b',
+      example: 'e',
+      positions: new Map([['a', { x: 1, y: 2 }]]),
+      layoutEdited: true,
+    };
+    storageSetWorkingCopy('wc', wc);
+    expect([...store.keys()]).toEqual(['wc']);
+    expect(storageGetWorkingCopy('wc')).toEqual(wc);
   });
 
-  it('is empty for corrupt JSON', () => {
+  it('keeps well-formed positions and drops the rest', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => '{"source":"s","positions":{"a":{"x":1,"y":2},"b":{"x":"no","y":0},"c":5}}',
+      setItem: () => {},
+    });
+    expect(storageGetWorkingCopy('wc')?.positions).toEqual(new Map([['a', { x: 1, y: 2 }]]));
+  });
+
+  it('is null for corrupt JSON or a missing source', () => {
     vi.stubGlobal('localStorage', { getItem: () => '{{', setItem: () => {} });
-    expect(storageGetPositions('positions').size).toBe(0);
+    expect(storageGetWorkingCopy('wc')).toBeNull();
+    vi.stubGlobal('localStorage', { getItem: () => '{"positions":{}}', setItem: () => {} });
+    expect(storageGetWorkingCopy('wc')).toBeNull();
   });
 });

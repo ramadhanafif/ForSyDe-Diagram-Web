@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { placeNodes, renameKey, type PlacedBox } from '../src/diagram/placement';
+import { LAYER_SPACING, NODE_SPACING } from '../src/diagram/toElk';
 
 const box = (id: string, x = 0, y = 0, width = 60, height = 60): PlacedBox => ({
   id,
@@ -34,6 +35,20 @@ describe('placeNodes', () => {
     expect(out.get('a')).toEqual({ x: 80, y: 90 });
   });
 
+  it('steps a hinted node down past the stored nodes it would cover', () => {
+    // edge-insert hint at the midpoint between two pinned neighbours
+    const out = placeNodes(
+      [box('m', 0, 0, 90, 90), box('a'), box('b')],
+      new Map([
+        ['a', { x: 0, y: 0 }],
+        ['b', { x: 124, y: 0 }],
+      ]),
+      new Map([['m', { x: 92, y: 30 }]]),
+      [],
+    );
+    expect(out.get('m')).toEqual({ x: 47, y: 60 + NODE_SPACING });
+  });
+
   it('places a new node right of its producer, centers aligned', () => {
     const out = placeNodes(
       [box('a', 0, 0, 60, 60), box('b', 999, 999, 40, 20)],
@@ -41,7 +56,7 @@ describe('placeNodes', () => {
       new Map(),
       [sig('a', 'b')],
     );
-    expect(out.get('b')).toEqual({ x: 10 + 60 + 64, y: 10 + 30 - 10 });
+    expect(out.get('b')).toEqual({ x: 10 + 60 + LAYER_SPACING, y: 10 + 30 - 10 });
   });
 
   it('steps down when the spot right of the producer is taken', () => {
@@ -49,12 +64,12 @@ describe('placeNodes', () => {
       [box('a'), box('c'), box('b')],
       new Map([
         ['a', { x: 0, y: 0 }],
-        ['c', { x: 124, y: 0 }],
+        ['c', { x: 60 + LAYER_SPACING, y: 0 }],
       ]),
       new Map(),
       [sig('a', 'b')],
     );
-    expect(out.get('b')).toEqual({ x: 124, y: 60 + 44 });
+    expect(out.get('b')).toEqual({ x: 60 + LAYER_SPACING, y: 60 + NODE_SPACING });
   });
 
   it('places producers first even when elk lists the consumer first', () => {
@@ -64,8 +79,8 @@ describe('placeNodes', () => {
       new Map(),
       [sig('b', 'c'), sig('a', 'b')],
     );
-    expect(out.get('b')).toEqual({ x: 124, y: 0 });
-    expect(out.get('c')).toEqual({ x: 248, y: 0 });
+    expect(out.get('b')).toEqual({ x: 60 + LAYER_SPACING, y: 0 });
+    expect(out.get('c')).toEqual({ x: 2 * (60 + LAYER_SPACING), y: 0 });
   });
 
   it('puts an unconnected node below the lowest one at the leftmost x', () => {
@@ -78,7 +93,7 @@ describe('placeNodes', () => {
       new Map(),
       [],
     );
-    expect(out.get('z')).toEqual({ x: 30, y: 160 + 44 });
+    expect(out.get('z')).toEqual({ x: 30, y: 160 + NODE_SPACING });
   });
 
   it('resolves a cycle with nothing placed and returns every node', () => {
@@ -87,7 +102,7 @@ describe('placeNodes', () => {
       sig('b', 'a'),
     ]);
     expect(out.get('a')).toEqual({ x: 7, y: 8 });
-    expect(out.get('b')).toEqual({ x: 7 + 60 + 64, y: 8 });
+    expect(out.get('b')).toEqual({ x: 7 + 60 + LAYER_SPACING, y: 8 });
     expect(out.size).toBe(2);
   });
 });

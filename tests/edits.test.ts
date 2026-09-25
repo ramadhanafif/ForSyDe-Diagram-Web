@@ -5,6 +5,7 @@ import {
   applySplices,
   deleteProcess,
   insertOnEdge,
+  outputRenames,
   renameProcess,
   renameSignal,
   setFunction,
@@ -141,6 +142,16 @@ describe('diagram edit operations', () => {
     const { ir: ir2 } = roundTrip(MODEL, deleteProcess(ir, 'd_d')!);
     expect(ir2.processes.map((p) => p.name)).toEqual(['a_a', 'a_b']);
     expect(ir2.signals.some((s) => s.name === 's_1' && s.target.name === 'a_b')).toBe(true);
+  });
+
+  it('reports system outputs an insert or delete rewires, and nothing else', () => {
+    const ir = build(MODEL);
+    const ins = insertOnEdge(MODEL, ir, edgeByName(ir, 's_out'), 'actor');
+    expect(outputRenames(ir, ins.splices)).toEqual([['s_out', ins.created[1]]]);
+    expect(outputRenames(ir, deleteProcess(ir, 'a_b')!)).toEqual([['s_out', 's_2']]);
+    expect(
+      outputRenames(ir, insertOnEdge(MODEL, ir, edgeByName(ir, 's_1'), 'actor').splices),
+    ).toEqual([]);
   });
 
   it('insert-then-delete restores the original wiring', () => {

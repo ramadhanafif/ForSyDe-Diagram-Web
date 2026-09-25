@@ -1,7 +1,14 @@
 import { toPng } from 'html-to-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
-import { addInput, addInputError, addSourceActor, deleteProcess, insertOnEdge } from '../core/edits';
+import {
+  addInput,
+  addInputError,
+  addSourceActor,
+  deleteProcess,
+  insertOnEdge,
+  outputRenames,
+} from '../core/edits';
 import { isDelay, type IRSystem } from '../core/ir';
 import { parseLayoutBlock, stripLayoutBlock, writeLayoutBlock, type Point } from '../core/layoutBlock';
 import type { ScheduleResult } from '../core/schedule';
@@ -17,9 +24,10 @@ import {
   preferredTheme,
   storageGet,
   storageGetJson,
-  storageGetPositions,
+  storageGetWorkingCopy,
   storageSet,
-  storageSetPositions,
+  storageSetWorkingCopy,
+  type WorkingCopy,
 } from './storage';
 import { Toolbar } from './Toolbar';
 import { startTour, TOUR_SEEN_KEY } from './tour';
@@ -183,23 +191,28 @@ const FLASH_TIMEOUT_MS = 1800;
 /** Keystroke quiet period before the editor text is written to localStorage. */
 const AUTOSAVE_MS = 500;
 
-/** localStorage keys for the working copy. */
-const SOURCE_KEY = 'source';
-/** Text as of the last load, open, new or export; the unsaved-changes baseline. */
-const BASELINE_KEY = 'baseline';
-/** Example the text came from, '' for a new or opened file. */
-const EXAMPLE_KEY = 'example';
-const POSITIONS_KEY = 'positions';
+/** localStorage key for the working copy (text, baseline, example, positions). */
+const WORKING_COPY_KEY = 'workingCopy';
 /** Horizontal distance from a new source actor's center to its io nodes' centers. */
 const IO_HINT_OFFSET = 110;
 
 const DEFAULT_EXAMPLE = examples.find((e) => e.name === 'SDF_example_002') ?? examples[0];
 
-/** Stored example name when a working copy exists, else the default example. */
-const initialExample = (): string => {
-  if (storageGet(SOURCE_KEY) == null) return DEFAULT_EXAMPLE?.name ?? '';
-  const name = storageGet(EXAMPLE_KEY) ?? '';
-  return examples.some((e) => e.name === name) ? name : '';
+/** Stored working copy, else the default example, unedited. */
+const initialWorkingCopy = (): WorkingCopy => {
+  const stored = storageGetWorkingCopy(WORKING_COPY_KEY);
+  if (stored) {
+    const known = examples.some((e) => e.name === stored.example);
+    return { ...stored, example: known ? stored.example : '' };
+  }
+  const text = DEFAULT_EXAMPLE?.source ?? '';
+  return {
+    source: text,
+    baseline: text,
+    example: DEFAULT_EXAMPLE?.name ?? '',
+    positions: new Map(),
+    layoutEdited: false,
+  };
 };
 
 const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
@@ -216,6 +229,29 @@ function elkBoxes(model: ModelState) {
     width: c.width ?? 0,
     height: c.height ?? 0,
   }));
+}
+
+/**
+ * Place every node of `model` over `pos` and write the result back. Ids absent
+ * from the model keep their entry, so an editor undo of a delete finds its
+ * old spot; Export writes only the model's ids.
+ * ponytail: stale ids accumulate until Tidy, New or Open; a new node reusing
+ * such a name lands on its old spot.
+ */
+function placeOver(model: ModelState, pos: Map<string, Point>, hints: Map<string, Point>) {
+  const base = new Map(pos);
+  for (const id of hints.keys()) base.delete(id); // a gesture beats a stale entry
+  return new Map([...base, ...placeNodes(elkBoxes(model), base, hints, model.ir.signals)]);
+}
+
+/** Hints for a source actor created at `at`: the actor there, its io pills either side. */
+function sourceActorHints(created: string[], at: Point): [string, Point][] {
+  const [proc, inSig, outSig] = created;
+  return [
+    [proc!, at],
+    [inSig!, { x: at.x - IO_HINT_OFFSET, y: at.y }],
+    [outSig!, { x: at.x + IO_HINT_OFFSET, y: at.y }],
+  ];
 }
 
 /**
@@ -257,13 +293,16 @@ export function App() {
   const pipe = usePipeline(source);
   const model = pipe.model;
 
-  const [example, setExample] = useState(initialExample);
+  const [initial] = useState(initialWorkingCopy);
+  const [example, setExample] = useState(initial.example);
   // node positions keyed by process or io signal name; empty means pure elk layout
-  const [positions, setPositions] = useState<Map<string, Point>>(() =>
-    storageGetPositions(POSITIONS_KEY),
-  );
-  useEffect(() => storageSetPositions(POSITIONS_KEY, positions), [positions]);
-  useEffect(() => storageSet(EXAMPLE_KEY, example), [example]);
+  const [positions, setPositions] = useState(initial.positions);
+  // the model on screen, for handlers and callbacks that must not go stale;
+  // updated after the diagram's effects, so a fit consults the committed model
+  const modelRef = useRef(model);
+  useEffect(() => {
+    modelRef.current = model;
+  }, [model]);
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -288,6 +327,9 @@ export function App() {
   // gesture points (node centers) and popover renames waiting for the model they produce
   const [hints, setHints] = useState<Map<string, Point>>(() => new Map());
   const [renames, setRenames] = useState<[string, string][]>([]);
+  const queueRenames = useCallback((pairs: [string, string][]) => {
+    if (pairs.length) setRenames((r) => [...r, ...pairs]);
+  }, []);
 
   // when processes appear or disappear, pulse the new ones and re-fit;
   // derived-during-render pattern so no setState-in-effect
@@ -299,7 +341,7 @@ export function App() {
     if (model && positions.size) {
       let pos = positions;
       for (const [from, to] of renames) pos = renameKey(pos, from, to);
-      setPositions(placeNodes(elkBoxes(model), pos, hints, model.ir.signals));
+      setPositions(placeOver(model, pos, hints));
     }
     if (model && hints.size) setHints(new Map());
     if (model && renames.length) setRenames([]);
@@ -323,8 +365,12 @@ export function App() {
   const [popover, setPopover] = useState<{ target: PopoverTarget; x: number; y: number } | null>(
     null,
   );
-  const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number } | null>(null);
-  const pendingFit = useRef(false);
+  // `at` is the right-click point in flow coordinates, where canvas adds land
+  const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number; at: Point } | null>(
+    null,
+  );
+  // source whose model the next fit waits for; null when none is pending
+  const pendingFit = useRef<string | null>(null);
   const exportingRef = useRef(false);
 
   useEffect(() => {
@@ -333,41 +379,56 @@ export function App() {
   }, [appTheme]);
   useEffect(() => storageSet('diagramTheme', diagramTheme), [diagramTheme]);
 
-  const [initialBaseline] = useState(() => storageGet(BASELINE_KEY) ?? DEFAULT_EXAMPLE?.source ?? '');
-  const baselineRef = useRef(initialBaseline);
-  const markSaved = useCallback((text: string) => {
-    baselineRef.current = text;
-    storageSet(BASELINE_KEY, text);
-  }, []);
+  const baselineRef = useRef(initial.baseline);
+  // a drag or Tidy since the baseline: unsaved even when the text is unchanged
+  const layoutEditedRef = useRef(initial.layoutEdited);
 
-  // autosave: debounced, plus a flush on pagehide so a quick close keeps the last keystrokes
-  const sourceRef = useRef<string | null>(null);
+  // autosave: the whole working copy under one key, debounced, plus a flush on
+  // pagehide so a quick close keeps the last keystrokes
+  const latestRef = useRef<WorkingCopy | null>(null); // null until the editor is loaded
+  const flush = useCallback(() => {
+    if (latestRef.current)
+      storageSetWorkingCopy(WORKING_COPY_KEY, {
+        ...latestRef.current,
+        baseline: baselineRef.current,
+        layoutEdited: layoutEditedRef.current,
+      });
+  }, []);
   useEffect(() => {
-    if (sourceRef.current === null) return; // editor not loaded yet: keep what is stored
-    sourceRef.current = source;
-    const t = setTimeout(() => storageSet(SOURCE_KEY, source), AUTOSAVE_MS);
+    if (latestRef.current === null) return; // editor not loaded yet: keep what is stored
+    latestRef.current = { ...latestRef.current, source, example, positions };
+    const t = setTimeout(flush, AUTOSAVE_MS);
     return () => clearTimeout(t);
-  }, [source]);
+  }, [source, example, positions, flush]);
   useEffect(() => {
-    const flush = () => {
-      if (sourceRef.current !== null) storageSet(SOURCE_KEY, sourceRef.current);
-    };
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
-  }, []);
+  }, [flush]);
+
+  const markSaved = useCallback(
+    (text: string) => {
+      baselineRef.current = text;
+      layoutEditedRef.current = false;
+      flush();
+    },
+    [flush],
+  );
 
   /** Replace the whole working copy after the unsaved-changes confirm; false if declined. */
   const replaceDoc = useCallback(
     (text: string, from: string, pos: Map<string, Point>, what: string): boolean => {
-      if (editorRef.current?.getDoc() !== baselineRef.current) {
+      if (editorRef.current?.getDoc() !== baselineRef.current || layoutEditedRef.current) {
         if (!window.confirm(`Discard unsaved changes and ${what}?`)) return false;
       }
+      // same text (reopening the file on screen): no new model will come to place it
+      const m = modelRef.current;
       setExample(from);
-      setPositions(pos);
+      setPositions(m && m.source === text && pos.size ? placeOver(m, pos, new Map()) : pos);
       setPopover(null);
       setMenu(null);
+      setNotice(null); // Tidy's undo belongs to the old document
       markSaved(text);
-      pendingFit.current = true;
+      pendingFit.current = text;
       editorRef.current?.setSource(text);
       return true;
     },
@@ -387,16 +448,21 @@ export function App() {
   const onOpen = (file: File) => {
     file
       .text()
-      .then((text) =>
-        replaceDoc(stripLayoutBlock(text), '', parseLayoutBlock(text), `open ${file.name}`),
-      )
+      .then((raw) => {
+        // the editor normalizes to \n; the baseline and model.source must match its text
+        const text = raw.replace(/\r\n?/g, '\n');
+        replaceDoc(stripLayoutBlock(text), '', parseLayoutBlock(text), `open ${file.name}`);
+      })
       .catch(() => setNotice({ text: `could not read ${file.name}` }));
   };
 
   const onExportHs = () => {
     const doc = editorRef.current?.getDoc() ?? '';
+    // stale ids kept for editor undo are not part of the file
+    const ids = new Set(model?.dg.graph.children?.map((c) => c.id));
+    const saved = model ? new Map([...positions].filter(([id]) => ids.has(id))) : positions;
     const url = URL.createObjectURL(
-      new Blob([writeLayoutBlock(doc, positions)], { type: 'text/x-haskell' }),
+      new Blob([writeLayoutBlock(doc, saved)], { type: 'text/x-haskell' }),
     );
     const a = document.createElement('a');
     a.href = url;
@@ -409,12 +475,10 @@ export function App() {
   // restore the working copy once the editor is mounted, else the default example
   // (idempotent under StrictMode)
   useEffect(() => {
-    const text = storageGet(SOURCE_KEY) ?? DEFAULT_EXAMPLE?.source;
-    if (text == null) return;
-    sourceRef.current = text;
-    pendingFit.current = true;
-    editorRef.current?.setSource(text);
-  }, []);
+    latestRef.current = initial;
+    pendingFit.current = initial.source;
+    editorRef.current?.setSource(initial.source);
+  }, [initial]);
 
   // first-run tour: once a valid model is on screen, never on a broken/empty first paint
   const tourStarted = useRef(false);
@@ -425,9 +489,12 @@ export function App() {
   }, [model]);
 
   // consulted by the diagram after each graph update, outside render
+  // only once the model for the replaced text is on screen, not on the old
+  // model's nodes moving to the new positions
   const consumePendingFit = useCallback(() => {
-    if (!pendingFit.current) return false;
-    pendingFit.current = false;
+    if (pendingFit.current === null || pendingFit.current !== modelRef.current?.source)
+      return false;
+    pendingFit.current = null;
     return true;
   }, []);
 
@@ -559,11 +626,14 @@ export function App() {
     setFitRequest((n) => n + 1);
     if (!positions.size) return;
     const prev = positions;
+    layoutEditedRef.current = true;
     setPositions(new Map());
     setNotice({
       text: 'automatic layout restored',
       undo: () => {
-        setPositions(prev);
+        // the text may have changed since Tidy: place against the current model
+        const m = modelRef.current;
+        setPositions(m ? placeOver(m, prev, new Map()) : prev);
         setNotice(null);
         setFitRequest((n) => n + 1);
       },
@@ -595,21 +665,16 @@ export function App() {
         if (!meta) return;
         const r = insertOnEdge(model.source, model.ir, meta.sig, kind);
         setHints((h) => new Map(h).set(r.created[0]!, at));
+        queueRenames(outputRenames(model.ir, r.splices));
         editorRef.current?.applySplices(r.splices);
       } else if (kind === 'actor') {
         // dropped on empty canvas: a source actor; a floating delay has no valid text form
         const r = addSourceActor(model.source, model.ir);
-        const [proc, inSig, outSig] = r.created;
-        setHints((h) =>
-          new Map(h)
-            .set(proc!, at)
-            .set(inSig!, { x: at.x - IO_HINT_OFFSET, y: at.y })
-            .set(outSig!, { x: at.x + IO_HINT_OFFSET, y: at.y }),
-        );
+        setHints((h) => new Map([...h, ...sourceActorHints(r.created, at)]));
         editorRef.current?.applySplices(r.splices);
       }
     },
-    [model],
+    [model, queueRenames],
   );
 
   /** Menu shortcut into the popover: same targets, actions inline, same staleness guard. */
@@ -623,7 +688,10 @@ export function App() {
       const editor = editorRef.current!;
       if (menu.target.kind === 'canvas') {
         if (action === 'add-actor') {
-          editor.applySplices(addSourceActor(model.source, model.ir).splices);
+          const r = addSourceActor(model.source, model.ir);
+          const at = menu.at;
+          setHints((h) => new Map([...h, ...sourceActorHints(r.created, at)]));
+          editor.applySplices(r.splices);
           setMenu(null);
         } else if (action === 'fit-view') {
           setFitRequest((n) => n + 1);
@@ -639,6 +707,7 @@ export function App() {
           const r = insertOnEdge(model.source, model.ir, meta.sig, kind);
           const mid = edgeMidpoint(model, menu.target.edgeId, positions);
           if (mid) setHints((h) => new Map(h).set(r.created[0]!, mid));
+          queueRenames(outputRenames(model.ir, r.splices));
           editor.applySplices(r.splices);
           setMenu(null);
         } else if (action === 'rename-signal') {
@@ -663,6 +732,7 @@ export function App() {
       if (action === 'delete') {
         const splices = deleteProcess(model.ir, p.name);
         if (splices) {
+          queueRenames(outputRenames(model.ir, splices));
           setMenu(null);
           editor.applySplices(splices);
         }
@@ -684,14 +754,14 @@ export function App() {
         setPopover({ target: { kind: 'node', name: p.name }, x: menu.x, y: menu.y });
       }
     },
-    [model, menu, positions],
+    [model, menu, positions, queueRenames],
   );
 
   const onContextMenu = useCallback(
-    (target: MenuTarget, cx: number, cy: number) => {
+    (target: MenuTarget, cx: number, cy: number, at: Point) => {
       if (target.kind === 'node' && target.name === '') return;
       setPopover(null);
-      setMenu({ target, ...paneCoords(cx, cy) });
+      setMenu({ target, at, ...paneCoords(cx, cy) });
     },
     [paneCoords],
   );
@@ -789,7 +859,11 @@ export function App() {
             onConnectRefused={onConnectRefused}
             flash={flash}
             positions={positions}
-            onPin={setPositions}
+            onPin={(pinned) => {
+              // merge: ids off screen (a stale diagram after Open) keep their spot
+              layoutEditedRef.current = true;
+              setPositions((p) => new Map([...p, ...pinned]));
+            }}
           />
           <div className="float-controls">
             <span className="detail-switch" title="Toggle each annotation on the diagram">

@@ -34,10 +34,12 @@ const MIN_IO_WIDTH = 30;
 const IO_HEIGHT = 20;
 /** Elk ports are points, not visuals. */
 const PORT_SIZE = 2;
-/** Gaps between layers, sibling nodes, and edges vs nodes. */
-const LAYER_SPACING = '64';
-const NODE_SPACING = '44';
-const EDGE_NODE_SPACING = '16';
+/** Gaps between layers, sibling nodes, and edges vs nodes; pinned placement reuses them. */
+export const LAYER_SPACING = 64;
+export const NODE_SPACING = 44;
+const EDGE_NODE_SPACING = 16;
+/** Gap between the outermost nodes and the graph box (elk's default, set explicitly). */
+export const GRAPH_PADDING = 12;
 
 /** Circle diameter fitting the widest stacked line (forsyde figure style). */
 function circleSize(stack: string[]): { width: number; height: number } {
@@ -135,9 +137,10 @@ export function buildElkGraph(ir: IRSystem, sched: ScheduleResult | null): Diagr
       'elk.algorithm': 'layered',
       'elk.direction': 'RIGHT',
       'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.layered.spacing.nodeNodeBetweenLayers': LAYER_SPACING,
-      'elk.spacing.nodeNode': NODE_SPACING,
-      'elk.spacing.edgeNode': EDGE_NODE_SPACING,
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(LAYER_SPACING),
+      'elk.spacing.nodeNode': String(NODE_SPACING),
+      'elk.spacing.edgeNode': String(EDGE_NODE_SPACING),
+      'elk.padding': `[top=${GRAPH_PADDING},left=${GRAPH_PADDING},bottom=${GRAPH_PADDING},right=${GRAPH_PADDING}]`,
     },
     children,
     edges,

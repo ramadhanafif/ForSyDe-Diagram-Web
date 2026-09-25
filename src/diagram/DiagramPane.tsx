@@ -10,8 +10,8 @@ import {
   type Edge,
 } from '@xyflow/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Point } from './placement';
-import type { DiagramGraph } from './toElk';
+import type { Point } from '../core/layoutBlock';
+import { GRAPH_PADDING, type DiagramGraph } from './toElk';
 import { toFlow, type FlowEdge, type FlowNode } from './toFlow';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './ElkEdge';
@@ -20,11 +20,12 @@ export interface DiagramCallbacks {
   onNodeClick(id: string, x: number, y: number): void;
   onEdgeClick(edgeId: string, x: number, y: number): void;
   onPaneClick(): void;
-  /** Right-click hit: node (its data-id), edge, or empty canvas. Coords are client. */
+  /** Right-click hit: node (its data-id), edge, or empty canvas. Coords are client; `at` is the flow point. */
   onContextMenu(
     target: { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string } | { kind: 'canvas' },
     x: number,
     y: number,
+    at: Point,
   ): void;
   onConnect(sourceHandle: string, targetHandle: string): void;
   isValidConnection(sourceHandle: string, targetHandle: string): boolean;
@@ -45,8 +46,6 @@ const FIT_DURATION_MS = 150;
 /** Zoom limits on the canvas. */
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
-/** Gap between the outermost nodes and the system boundary; elk's default graph padding. */
-const BOUNDARY_PAD = 12;
 
 function edgeElementAt(x: number, y: number): Element | null {
   for (const el of document.elementsFromPoint(x, y)) {
@@ -150,10 +149,10 @@ function Diagram(props: Props) {
   // the boundary hugs elk's graph box, or the live nodes once pinned
   let box = { x: 0, y: 0, w: dg?.graph.width ?? 0, h: dg?.graph.height ?? 0 };
   if (pinned && nodes.length) {
-    const x = Math.min(...nodes.map((n) => n.position.x)) - BOUNDARY_PAD;
-    const y = Math.min(...nodes.map((n) => n.position.y)) - BOUNDARY_PAD;
-    const r = Math.max(...nodes.map((n) => n.position.x + (n.width ?? 0))) + BOUNDARY_PAD;
-    const b = Math.max(...nodes.map((n) => n.position.y + (n.height ?? 0))) + BOUNDARY_PAD;
+    const x = Math.min(...nodes.map((n) => n.position.x)) - GRAPH_PADDING;
+    const y = Math.min(...nodes.map((n) => n.position.y)) - GRAPH_PADDING;
+    const r = Math.max(...nodes.map((n) => n.position.x + (n.width ?? 0))) + GRAPH_PADDING;
+    const b = Math.max(...nodes.map((n) => n.position.y + (n.height ?? 0))) + GRAPH_PADDING;
     box = { x, y, w: r - x, h: b - y };
   }
 
@@ -307,14 +306,15 @@ function DiagramWrap(props: Props) {
       }}
       onContextMenu={(e) => {
         e.preventDefault();
+        const at = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const node = (e.target as Element).closest?.('.react-flow__node')?.getAttribute('data-id');
         if (node) {
-          props.onContextMenu({ kind: 'node', name: node }, e.clientX, e.clientY);
+          props.onContextMenu({ kind: 'node', name: node }, e.clientX, e.clientY, at);
           return;
         }
         const edgeId = edgeElementAt(e.clientX, e.clientY)?.getAttribute('data-id');
-        if (edgeId) props.onContextMenu({ kind: 'edge', edgeId }, e.clientX, e.clientY);
-        else props.onContextMenu({ kind: 'canvas' }, e.clientX, e.clientY);
+        if (edgeId) props.onContextMenu({ kind: 'edge', edgeId }, e.clientX, e.clientY, at);
+        else props.onContextMenu({ kind: 'canvas' }, e.clientX, e.clientY, at);
       }}
     >
       <Diagram {...props} />
