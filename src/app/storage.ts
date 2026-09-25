@@ -1,3 +1,5 @@
+import type { Point } from '../core/layoutBlock';
+
 /** Guarded browser persistence: silent fallback when storage is missing or throws. */
 
 export function storageGet(key: string): string | null {
@@ -27,6 +29,20 @@ export function storageGetJson<T extends object>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+/** Stored node positions (JSON object of id -> {x, y}); malformed entries are dropped. */
+export function storageGetPositions(key: string): Map<string, Point> {
+  const positions = new Map<string, Point>();
+  for (const [id, p] of Object.entries(storageGetJson<Record<string, unknown>>(key, {}))) {
+    const { x, y } = (p ?? {}) as Partial<Point>;
+    if (Number.isFinite(x) && Number.isFinite(y)) positions.set(id, { x: x!, y: y! });
+  }
+  return positions;
+}
+
+export function storageSetPositions(key: string, positions: Map<string, Point>): void {
+  storageSet(key, JSON.stringify(Object.fromEntries(positions)));
 }
 
 /** System color-scheme preference; 'light' when matchMedia is missing or throws. */

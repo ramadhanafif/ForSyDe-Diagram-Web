@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
 import { addInput, addInputError, addSourceActor, deleteProcess, insertOnEdge } from '../core/edits';
 import { isDelay, type IRSystem } from '../core/ir';
+import { parseLayoutBlock, stripLayoutBlock, writeLayoutBlock, type Point } from '../core/layoutBlock';
 import type { ScheduleResult } from '../core/schedule';
 import { Menu, menuItems, type MenuTarget } from '../diagram/ContextMenu';
 import { findDefinitionOffset } from '../diagram/labels';
@@ -10,7 +11,15 @@ import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPa
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
 import { examples } from './examples';
-import { preferredTheme, storageGet, storageGetJson, storageSet } from './storage';
+import { BLANK_MODEL, exportFileName } from './files';
+import {
+  preferredTheme,
+  storageGet,
+  storageGetJson,
+  storageGetPositions,
+  storageSet,
+  storageSetPositions,
+} from './storage';
 import { Toolbar } from './Toolbar';
 import { startTour, TOUR_SEEN_KEY } from './tour';
 import { usePipeline } from './usePipeline';
@@ -170,6 +179,25 @@ function componentCount(ir: IRSystem): number {
 
 const NOTICE_TIMEOUT_MS = 5000;
 const FLASH_TIMEOUT_MS = 1800;
+/** Keystroke quiet period before the editor text is written to localStorage. */
+const AUTOSAVE_MS = 500;
+
+/** localStorage keys for the working copy. */
+const SOURCE_KEY = 'source';
+/** Text as of the last load, open, new or export; the unsaved-changes baseline. */
+const BASELINE_KEY = 'baseline';
+/** Example the text came from, '' for a new or opened file. */
+const EXAMPLE_KEY = 'example';
+const POSITIONS_KEY = 'positions';
+
+const DEFAULT_EXAMPLE = examples.find((e) => e.name === 'SDF_example_002') ?? examples[0];
+
+/** Stored example name when a working copy exists, else the default example. */
+const initialExample = (): string => {
+  if (storageGet(SOURCE_KEY) == null) return DEFAULT_EXAMPLE?.name ?? '';
+  const name = storageGet(EXAMPLE_KEY) ?? '';
+  return examples.some((e) => e.name === name) ? name : '';
+};
 
 const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
 
@@ -191,9 +219,13 @@ export function App() {
   const pipe = usePipeline(source);
   const model = pipe.model;
 
-  const [example, setExample] = useState(
-    () => (examples.find((e) => e.name === 'SDF_example_002') ?? examples[0])?.name ?? '',
+  const [example, setExample] = useState(initialExample);
+  // node positions keyed by process or io signal name; empty means pure elk layout
+  const [positions, setPositions] = useState<Map<string, Point>>(() =>
+    storageGetPositions(POSITIONS_KEY),
   );
+  useEffect(() => storageSetPositions(POSITIONS_KEY, positions), [positions]);
+  useEffect(() => storageSet(EXAMPLE_KEY, example), [example]);
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -251,31 +283,87 @@ export function App() {
   }, [appTheme]);
   useEffect(() => storageSet('diagramTheme', diagramTheme), [diagramTheme]);
 
+  const [initialBaseline] = useState(() => storageGet(BASELINE_KEY) ?? DEFAULT_EXAMPLE?.source ?? '');
+  const baselineRef = useRef(initialBaseline);
+  const markSaved = useCallback((text: string) => {
+    baselineRef.current = text;
+    storageSet(BASELINE_KEY, text);
+  }, []);
+
+  // autosave: debounced, plus a flush on pagehide so a quick close keeps the last keystrokes
+  const sourceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (sourceRef.current === null) return; // editor not loaded yet: keep what is stored
+    sourceRef.current = source;
+    const t = setTimeout(() => storageSet(SOURCE_KEY, source), AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [source]);
+  useEffect(() => {
+    const flush = () => {
+      if (sourceRef.current !== null) storageSet(SOURCE_KEY, sourceRef.current);
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, []);
+
+  /** Replace the whole working copy after the unsaved-changes confirm; false if declined. */
+  const replaceDoc = useCallback(
+    (text: string, from: string, pos: Map<string, Point>, what: string): boolean => {
+      if (editorRef.current?.getDoc() !== baselineRef.current) {
+        if (!window.confirm(`Discard unsaved changes and ${what}?`)) return false;
+      }
+      setExample(from);
+      setPositions(pos);
+      setPopover(null);
+      setMenu(null);
+      markSaved(text);
+      pendingFit.current = true;
+      editorRef.current?.setSource(text);
+      return true;
+    },
+    [markSaved],
+  );
+
   const loadExample = useCallback(
     (name: string) => {
       const ex = examples.find((e) => e.name === name);
-      if (!ex) return;
-      const cur = examples.find((e) => e.name === example);
-      if (cur && editorRef.current?.getDoc() !== cur.source) {
-        if (!window.confirm('Discard unsaved changes and load this example?')) return;
-      }
-      setExample(name);
-      setPopover(null);
-      setMenu(null);
-      pendingFit.current = true;
-      editorRef.current?.setSource(ex.source);
+      if (ex) replaceDoc(ex.source, name, new Map(), 'load this example');
     },
-    [example],
+    [replaceDoc],
   );
 
-  // initial example: load into the editor once it is mounted (idempotent under StrictMode)
+  const onNew = () => replaceDoc(BLANK_MODEL, '', new Map(), 'start a new model');
+
+  const onOpen = (file: File) => {
+    file
+      .text()
+      .then((text) =>
+        replaceDoc(stripLayoutBlock(text), '', parseLayoutBlock(text), `open ${file.name}`),
+      )
+      .catch(() => setNotice(`could not read ${file.name}`));
+  };
+
+  const onExportHs = () => {
+    const doc = editorRef.current?.getDoc() ?? '';
+    const url = URL.createObjectURL(
+      new Blob([writeLayoutBlock(doc, positions)], { type: 'text/x-haskell' }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = exportFileName(doc);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url)); // after the download has started
+    markSaved(doc);
+  };
+
+  // restore the working copy once the editor is mounted, else the default example
+  // (idempotent under StrictMode)
   useEffect(() => {
-    const ex = examples.find((e) => e.name === example);
-    if (ex) {
-      pendingFit.current = true;
-      editorRef.current?.setSource(ex.source);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const text = storageGet(SOURCE_KEY) ?? DEFAULT_EXAMPLE?.source;
+    if (text == null) return;
+    sourceRef.current = text;
+    pendingFit.current = true;
+    editorRef.current?.setSource(text);
   }, []);
 
   // first-run tour: once a valid model is on screen, never on a broken/empty first paint
@@ -557,6 +645,9 @@ export function App() {
       <Toolbar
         example={example}
         onExample={loadExample}
+        onNew={onNew}
+        onOpen={onOpen}
+        onExportHs={onExportHs}
         onFit={() => setFitRequest((n) => n + 1)}
         showSchedule={showSchedule}
         onToggleSchedule={() => setShowSchedule((v) => !v)}
