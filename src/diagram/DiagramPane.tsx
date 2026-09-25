@@ -9,8 +9,9 @@ import {
   type Connection,
   type Edge,
 } from '@xyflow/react';
-import { useEffect, useMemo, useRef } from 'react';
-import type { DiagramGraph } from './toElk';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Point } from '../core/layoutBlock';
+import { GRAPH_PADDING, type DiagramGraph } from './toElk';
 import { toFlow, type FlowEdge, type FlowNode } from './toFlow';
 import { nodeTypes } from './nodes';
 import { edgeTypes } from './ElkEdge';
@@ -19,16 +20,19 @@ export interface DiagramCallbacks {
   onNodeClick(id: string, x: number, y: number): void;
   onEdgeClick(edgeId: string, x: number, y: number): void;
   onPaneClick(): void;
-  /** Right-click hit: node (its data-id), edge, or empty canvas. Coords are client. */
+  /** Right-click hit: node (its data-id), edge, or empty canvas. Coords are client; `at` is the flow point. */
   onContextMenu(
     target: { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string } | { kind: 'canvas' },
     x: number,
     y: number,
+    at: Point,
   ): void;
   onConnect(sourceHandle: string, targetHandle: string): void;
   isValidConnection(sourceHandle: string, targetHandle: string): boolean;
-  /** Palette chip dropped: on an edge (its id) or on empty canvas (null). */
-  onDropInsert(kind: 'actor' | 'delay', edgeId: string | null): void;
+  /** Palette chip dropped: on an edge (its id) or on empty canvas (null), at a flow point. */
+  onDropInsert(kind: 'actor' | 'delay', edgeId: string | null, at: Point): void;
+  /** A node move landed (drag or arrow key): every node's position, which pins the layout. */
+  onPin(positions: Map<string, Point>): void;
   /** A connection gesture ended on a handle but was refused. */
   onConnectRefused(sourceHandle: string, targetHandle: string): void;
 }
@@ -39,6 +43,8 @@ const DND_TYPE = 'application/forsyde-node';
 const FIT_PADDING = 0.08;
 const FIT_MAX_ZOOM = 2;
 const FIT_DURATION_MS = 150;
+/** Pointer travel (px) below which a press on a node is a click, not a drag. */
+const DRAG_THRESHOLD_PX = 4;
 /** Zoom limits on the canvas. */
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
@@ -81,56 +87,56 @@ interface Props extends DiagramCallbacks {
   fitRequest: number;
   /** Polled after each graph update; returns true when a fit is pending (example load). */
   consumePendingFit(): boolean;
+  /** Pinned node positions by id; empty means elk's layout as is. */
+  positions: Map<string, Point>;
 }
 
 function Diagram(props: Props) {
-  const { dg, showUnitRates, fitRequest, consumePendingFit } = props;
+  const { dg, showUnitRates, fitRequest, consumePendingFit, positions } = props;
   const { fitView } = useReactFlow();
 
-  const computed = useMemo(
+  const elk = useMemo(
     () => (dg ? toFlow(dg.graph, dg.meta, dg.edgeMeta, showUnitRates) : { nodes: [], edges: [] }),
     [dg, showUnitRates],
   );
+  const computed = useMemo(
+    () =>
+      positions.size
+        ? {
+            ...elk,
+            nodes: elk.nodes.map((n) => ({ ...n, position: positions.get(n.id) ?? n.position })),
+          }
+        : elk,
+    [elk, positions],
+  );
+  // the first drag of an elk layout already routes like a pinned one
+  const [dragging, setDragging] = useState(false);
+  const pinned = positions.size > 0 || dragging;
 
   // node positions are live (draggable); edges/labels derive from them below
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   const { flash } = props;
-  useEffect(
-    () =>
-      setNodes(
-        flash.length
-          ? computed.nodes.map((n) =>
-              flash.includes(n.id) ? { ...n, className: 'just-added' } : n,
-            )
-          : computed.nodes,
-      ),
-    [computed, setNodes, flash],
-  );
-
-  // translate elk path endpoints by each node's drag delta so edges follow;
-  // ponytail: only endpoints move, mid-bends reroute at the next re-layout
-  const edges: FlowEdge[] = useMemo(() => {
-    const delta = new Map<string, { dx: number; dy: number }>();
-    for (const n of nodes) {
-      const orig = computed.nodes.find((o) => o.id === n.id);
-      if (!orig) continue;
-      const dx = n.position.x - orig.position.x;
-      const dy = n.position.y - orig.position.y;
-      if (dx || dy) delta.set(n.id, { dx, dy });
-    }
-    if (!delta.size) return computed.edges;
-    return computed.edges.map((e) => {
-      const ds = delta.get(e.source);
-      const dt = delta.get(e.target);
-      if (!ds && !dt) return e;
-      const points = e.data!.points.map((p, i, arr) => {
-        if (i === 0 && ds) return { x: p.x + ds.dx, y: p.y + ds.dy };
-        if (i === arr.length - 1 && dt) return { x: p.x + dt.dx, y: p.y + dt.dy };
-        return p;
-      });
-      return { ...e, data: { ...e.data!, points } };
+  useEffect(() => {
+    // a reset mid-drag would snap the dragged node back; drag stop re-runs this
+    if (dragging) return;
+    // carry selection over, so Enter-to-edit and group re-drag survive a pin
+    setNodes((prev) => {
+      const selected = new Set(prev.filter((n) => n.selected).map((n) => n.id));
+      return computed.nodes.map((n) => ({
+        ...n,
+        selected: selected.has(n.id),
+        ...(flash.includes(n.id) ? { className: 'just-added' } : {}),
+      }));
     });
-  }, [computed, nodes]);
+  }, [computed, setNodes, flash, dragging]);
+
+  const edges: FlowEdge[] = useMemo(
+    () =>
+      pinned
+        ? computed.edges.map((e) => ({ ...e, data: { ...e.data!, pinned: true } }))
+        : computed.edges,
+    [computed, pinned],
+  );
 
   const handledFit = useRef(0);
   useEffect(() => {
@@ -144,8 +150,15 @@ function Diagram(props: Props) {
     }
   }, [fitRequest, nodes, fitView, consumePendingFit]);
 
-  const w = dg?.graph.width ?? 0;
-  const h = dg?.graph.height ?? 0;
+  // the boundary hugs elk's graph box, or the live nodes once pinned
+  let box = { x: 0, y: 0, w: dg?.graph.width ?? 0, h: dg?.graph.height ?? 0 };
+  if (pinned && nodes.length) {
+    const x = Math.min(...nodes.map((n) => n.position.x)) - GRAPH_PADDING;
+    const y = Math.min(...nodes.map((n) => n.position.y)) - GRAPH_PADDING;
+    const r = Math.max(...nodes.map((n) => n.position.x + (n.width ?? 0))) + GRAPH_PADDING;
+    const b = Math.max(...nodes.map((n) => n.position.y + (n.height ?? 0))) + GRAPH_PADDING;
+    box = { x, y, w: r - x, h: b - y };
+  }
 
   return (
     <ReactFlow
@@ -155,7 +168,24 @@ function Diagram(props: Props) {
         .join(' ')}
       nodes={nodes}
       edges={edges}
-      onNodesChange={onNodesChange}
+      onNodesChange={(changes) => {
+        onNodesChange(changes);
+        // a move lands (drag or selection-box drag end, arrow-key nudge): pin everything
+        const moved = new Map<string, Point>();
+        for (const c of changes) {
+          if (c.type === 'position' && c.dragging === false && c.position)
+            moved.set(c.id, c.position);
+        }
+        if (!moved.size) return;
+        const rounded = new Map<string, Point>();
+        for (const n of nodes) {
+          const p = moved.get(n.id) ?? n.position;
+          rounded.set(n.id, { x: Math.round(p.x), y: Math.round(p.y) });
+        }
+        props.onPin(rounded);
+      }}
+      nodeDragThreshold={DRAG_THRESHOLD_PX}
+      nodeClickDistance={DRAG_THRESHOLD_PX}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       minZoom={MIN_ZOOM}
@@ -170,6 +200,9 @@ function Diagram(props: Props) {
       onNodeClick={(ev, node) => {
         if (node.type !== 'io') props.onNodeClick(node.id, ev.clientX, ev.clientY);
       }}
+      // also fired for a selection-box drag; the pin comes from onNodesChange
+      onNodeDragStart={() => setDragging(true)}
+      onNodeDragStop={() => setDragging(false)}
       onEdgeClick={(ev, edge: Edge) => props.onEdgeClick(edge.id, ev.clientX, ev.clientY)}
       onPaneClick={() => props.onPaneClick()}
       onConnect={(c: Connection) => {
@@ -207,14 +240,17 @@ function Diagram(props: Props) {
             className="system-boundary-box"
             style={{
               position: 'absolute',
-              transform: 'translate(-16px, -16px)',
-              width: w + 32,
-              height: h + 32,
+              transform: `translate(${box.x - 16}px, ${box.y - 16}px)`,
+              width: box.w + 32,
+              height: box.h + 32,
             }}
           />
           <div
             className="system-label"
-            style={{ position: 'absolute', transform: `translate(${w / 2 - 24}px, -40px)` }}
+            style={{
+              position: 'absolute',
+              transform: `translate(${box.x + box.w / 2 - 24}px, ${box.y - 40}px)`,
+            }}
           >
             System
           </div>
@@ -231,7 +267,9 @@ function Diagram(props: Props) {
   );
 }
 
-export function DiagramPane(props: Props) {
+/** Needs the provider above it: drops convert screen points to flow points. */
+function DiagramWrap(props: Props) {
+  const { screenToFlowPosition } = useReactFlow();
   const hovered = useRef<Element | null>(null);
   const clearHover = () => {
     hovered.current?.classList.remove('drop-target');
@@ -278,23 +316,22 @@ export function DiagramPane(props: Props) {
         e.preventDefault();
         const edgeId = edgeElementAt(e.clientX, e.clientY)?.getAttribute('data-id') ?? null;
         clearHover();
-        props.onDropInsert(kind, edgeId);
+        props.onDropInsert(kind, edgeId, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
       }}
       onContextMenu={(e) => {
         e.preventDefault();
+        const at = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         const node = (e.target as Element).closest?.('.react-flow__node')?.getAttribute('data-id');
         if (node) {
-          props.onContextMenu({ kind: 'node', name: node }, e.clientX, e.clientY);
+          props.onContextMenu({ kind: 'node', name: node }, e.clientX, e.clientY, at);
           return;
         }
         const edgeId = edgeElementAt(e.clientX, e.clientY)?.getAttribute('data-id');
-        if (edgeId) props.onContextMenu({ kind: 'edge', edgeId }, e.clientX, e.clientY);
-        else props.onContextMenu({ kind: 'canvas' }, e.clientX, e.clientY);
+        if (edgeId) props.onContextMenu({ kind: 'edge', edgeId }, e.clientX, e.clientY, at);
+        else props.onContextMenu({ kind: 'canvas' }, e.clientX, e.clientY, at);
       }}
     >
-      <ReactFlowProvider>
-        <Diagram {...props} />
-      </ReactFlowProvider>
+      <Diagram {...props} />
       {!props.dg && (
         <div className="empty-canvas">
           <div className="empty-title">No diagram yet</div>
@@ -304,5 +341,13 @@ export function DiagramPane(props: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+export function DiagramPane(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <DiagramWrap {...props} />
+    </ReactFlowProvider>
   );
 }

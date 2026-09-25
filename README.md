@@ -24,6 +24,10 @@ npm run build    # production bundle (dist/)
 
 Deploys to GitHub Pages from `main` via `.github/workflows/deploy.yml`.
 
+The working copy (text, baseline, example, positions and the layout-edited
+flag) lives in localStorage as one JSON object under the key `workingCopy`;
+clear site data to reset to the default example.
+
 ## Editing from the diagram
 
 The diagram (React Flow, laid out by elk) is interactive and every edit is
@@ -46,8 +50,20 @@ of truth:
   to a new system output
 - new actors get a runnable function stub appended to the file, for example
   `f_5 :: [Int] -> [Int]` with `f_5 _ = replicate 1 0`
-- nodes can be dragged to inspect a layout; positions are ephemeral and reset
-  at the next re-layout since they are not part of the source
+- dragging a node pins the whole layout: every node keeps its position across
+  edits (positions are keyed by name, so a rename typed in the editor places
+  that node as new; renames made from the diagram keep it), new nodes land
+  where they were dropped or next to their producer, and
+  edges route as smoothstep lines between the ports; Tidy returns to the
+  automatic layout (with an Undo in the toast), and the positions travel in
+  exported .hs files
+
+The editor text and node positions autosave to the browser's localStorage and
+are restored on reload. New starts a blank model, Open .hs loads a file and
+restores the positions stored in its trailing `-- @layout` comment lines, and
+Export .hs downloads the source with those lines appended (GHC ignores them).
+New, Open and the example picker ask before discarding unsaved changes,
+including a dragged layout.
 
 Undo works through the editor history as usual, since diagram edits are
 ordinary text edits. Freshly inserted processes pulse briefly and the view

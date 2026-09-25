@@ -1,10 +1,15 @@
+import { useRef } from 'react';
 import pkg from '../../package.json';
 import { examples } from './examples';
 
 export interface ToolbarProps {
   example: string;
   onExample(name: string): void;
+  onNew(): void;
+  onOpen(file: File): void;
+  onExportHs(): void;
   onFit(): void;
+  onTidy(): void;
   showSchedule: boolean;
   onToggleSchedule(): void;
   onAddActor(): void;
@@ -17,6 +22,7 @@ export interface ToolbarProps {
 }
 
 export function Toolbar(p: ToolbarProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
   return (
     <header className="toolbar">
       <span className="brand">ForSyDe Playground</span>
@@ -24,11 +30,32 @@ export function Toolbar(p: ToolbarProps) {
         v{pkg.version}
       </span>
       <span className="toolbar-items">
+        <button title="Start a blank model" onClick={p.onNew}>
+          New
+        </button>
+        <button title="Open a .hs file" onClick={() => fileRef.current?.click()}>
+          Open .hs
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".hs"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = ''; // reopening the same file must fire change again
+            if (file) p.onOpen(file);
+          }}
+        />
+        <button title="Download the source with node positions as a .hs file" onClick={p.onExportHs}>
+          Export .hs
+        </button>
         <select
           title="Load example"
           value={p.example}
           onChange={(e) => p.onExample(e.target.value)}
         >
+          {p.example === '' && <option value="">untitled</option>}
           {examples.map((ex) => (
             <option key={ex.name} value={ex.name}>
               {ex.name}
@@ -36,6 +63,12 @@ export function Toolbar(p: ToolbarProps) {
           ))}
         </select>
         <button onClick={p.onFit}>Fit</button>
+        <button
+          title="Re-run the automatic layout, discarding dragged node positions"
+          onClick={p.onTidy}
+        >
+          Tidy
+        </button>
         <button
           className={p.showSchedule ? 'active' : ''}
           title="Show or hide the schedule results: firing order, repetitions and buffer sizes"

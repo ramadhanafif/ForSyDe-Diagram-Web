@@ -22,6 +22,8 @@ export interface FlowEdgeData extends Record<string, unknown> {
   /** Elk's routed points (absolute flow coordinates), start to end. */
   points: { x: number; y: number }[];
   showUnitRates: boolean;
+  /** Pinned layout: route smoothstep between the handles, not along `points`. */
+  pinned?: boolean;
 }
 
 export type FlowNode = Node<FlowNodeData>;
@@ -61,7 +63,6 @@ export function toFlow(
       position: { x: child.x ?? 0, y: child.y ?? 0 },
       width,
       height,
-      draggable: false,
       data: { meta: m, ports, width, height },
     });
   }

@@ -115,6 +115,28 @@ export function insertOnEdge(
 }
 
 /**
+ * System outputs an edit rewires to another signal, as [old, new] pairs.
+ * An output node's id is its signal name, so callers carry position keys over.
+ * Recognises the whole-span identifier replacements insertOnEdge and
+ * deleteProcess emit on an output's span.
+ */
+export function outputRenames(ir: IRSystem, splices: Splice[]): [string, string][] {
+  const out: [string, string][] = [];
+  for (const s of ir.signals) {
+    if (s.target.name !== s.name || !ir.outputs.includes(s.name)) continue;
+    const hit = splices.find((x) => x.from === s.targetSpan.from && x.to === s.targetSpan.to);
+    if (!hit || hit.insert === s.name || !/^[A-Za-z_][A-Za-z0-9_']*$/.test(hit.insert)) continue;
+    // an existing node id (a system input fed straight through) keeps its own spot
+    const isNode =
+      ir.inputs.includes(hit.insert) ||
+      ir.outputs.includes(hit.insert) ||
+      ir.processes.some((p) => p.name === hit.insert);
+    if (!isNode) out.push([s.name, hit.insert]);
+  }
+  return out;
+}
+
+/**
  * Add a new actor fed by a fresh system input; its output becomes a new
  * system output so the model stays fully connected.
  */

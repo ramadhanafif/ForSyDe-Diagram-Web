@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import {
   deleteProcess,
   insertOnEdge,
+  outputRenames,
   renameProcess,
   renameSignal,
   setFunction,
@@ -26,6 +27,10 @@ interface Props {
   model: ModelState;
   editorRef: React.RefObject<EditorApi | null>;
   onClose(): void;
+  /** A process was inserted on the target edge (before its splices apply). */
+  onInserted(proc: string): void;
+  /** A process or signal is being renamed; the layout carries its position. */
+  onRenamed(oldId: string, newId: string): void;
 }
 
 function parseInts(text: string): number[] | null {
@@ -41,7 +46,16 @@ function parseTokens(text: string): number[] | null {
   return parts.map(Number);
 }
 
-export function EditPopover({ target, x, y, model, editorRef, onClose }: Props) {
+export function EditPopover({
+  target,
+  x,
+  y,
+  model,
+  editorRef,
+  onClose,
+  onInserted,
+  onRenamed,
+}: Props) {
   const [error, setError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
@@ -77,11 +91,29 @@ export function EditPopover({ target, x, y, model, editorRef, onClose }: Props) 
   let body: React.ReactNode = null;
   if (target.kind === 'edge') {
     const meta = model.dg.edgeMeta.get(target.edgeId);
-    if (meta) body = <EdgeBody sig={meta.sig} model={model} apply={apply} />;
+    if (meta)
+      body = (
+        <EdgeBody
+          sig={meta.sig}
+          model={model}
+          apply={apply}
+          onInserted={onInserted}
+          onRenamed={onRenamed}
+        />
+      );
   } else {
     const p = model.ir.processes.find((q) => q.name === target.name);
     if (p)
-      body = <NodeBody p={p} model={model} apply={apply} editorRef={editorRef} onClose={onClose} />;
+      body = (
+        <NodeBody
+          p={p}
+          model={model}
+          apply={apply}
+          editorRef={editorRef}
+          onClose={onClose}
+          onRenamed={onRenamed}
+        />
+      );
   }
   if (!body) return null;
 
@@ -102,12 +134,34 @@ export function EditPopover({ target, x, y, model, editorRef, onClose }: Props) 
 
 type Apply = (make: () => Splice[] | string) => void;
 
-function EdgeBody({ sig, model, apply }: { sig: IRSignal; model: ModelState; apply: Apply }) {
+function EdgeBody({
+  sig,
+  model,
+  apply,
+  onInserted,
+  onRenamed,
+}: {
+  sig: IRSignal;
+  model: ModelState;
+  apply: Apply;
+  onInserted(proc: string): void;
+  onRenamed(oldId: string, newId: string): void;
+}) {
   const [name, setName] = useState(sig.name);
   const applyRename = () =>
-    apply(
-      () => renameSignal(model.source, model.ir, sig.name, name.trim()) ?? 'name taken or invalid',
-    );
+    apply(() => {
+      const splices = renameSignal(model.source, model.ir, sig.name, name.trim());
+      if (!splices) return 'name taken or invalid';
+      onRenamed(sig.name, name.trim());
+      return splices;
+    });
+  const insert = (kind: 'actor' | 'delay') =>
+    apply(() => {
+      const r = insertOnEdge(model.source, model.ir, sig, kind);
+      onInserted(r.created[0]!);
+      for (const [a, b] of outputRenames(model.ir, r.splices)) onRenamed(a, b);
+      return r.splices;
+    });
   return (
     <form
       onSubmit={(e) => {
@@ -120,13 +174,13 @@ function EdgeBody({ sig, model, apply }: { sig: IRSignal; model: ModelState; app
         <span>insert</span>
         <button
           type="button"
-          onClick={() => apply(() => insertOnEdge(model.source, model.ir, sig, 'actor').splices)}
+          onClick={() => insert('actor')}
         >
           actor
         </button>
         <button
           type="button"
-          onClick={() => apply(() => insertOnEdge(model.source, model.ir, sig, 'delay').splices)}
+          onClick={() => insert('delay')}
         >
           delay
         </button>
@@ -151,12 +205,14 @@ function NodeBody({
   apply,
   editorRef,
   onClose,
+  onRenamed,
 }: {
   p: IRProcess;
   model: ModelState;
   apply: Apply;
   editorRef: React.RefObject<EditorApi | null>;
   onClose(): void;
+  onRenamed(oldId: string, newId: string): void;
 }) {
   const delay = isDelay(p);
   const [name, setName] = useState(p.name);
@@ -205,7 +261,9 @@ function NodeBody({
   const applyAll = () =>
     apply(() => {
       const r = buildSplices();
-      return r.error ?? r.splices;
+      if (r.error) return r.error;
+      if (name.trim() !== p.name) onRenamed(p.name, name.trim());
+      return r.splices;
     });
 
   return (
@@ -273,11 +331,12 @@ function NodeBody({
               return;
             }
             setConfirmDelete('');
-            apply(
-              () =>
-                deleteProcess(model.ir, p.name) ??
-                'only single-input single-output processes can be deleted here',
-            );
+            apply(() => {
+              const splices = deleteProcess(model.ir, p.name);
+              if (!splices) return 'only single-input single-output processes can be deleted here';
+              for (const [a, b] of outputRenames(model.ir, splices)) onRenamed(a, b);
+              return splices;
+            });
           }}
         >
           {armed ? 'confirm delete?' : 'delete'}
