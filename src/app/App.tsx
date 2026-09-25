@@ -14,7 +14,7 @@ import { parseLayoutBlock, stripLayoutBlock, writeLayoutBlock, type Point } from
 import type { ScheduleResult } from '../core/schedule';
 import { Menu, menuItems, type MenuTarget } from '../diagram/ContextMenu';
 import { findDefinitionOffset } from '../diagram/labels';
-import { placeNodes, renameKey } from '../diagram/placement';
+import { edgeMidpoint, placeOver, renameKey, type PlacedBox } from '../diagram/placement';
 import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
@@ -221,7 +221,7 @@ const initialDiagramTheme = (): 'modern' | 'lecture' =>
   storageGet('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
 
 /** Elk's boxes for every node of a laid-out model, placement's input. */
-function elkBoxes(model: ModelState) {
+function elkBoxes(model: ModelState): PlacedBox[] {
   return (model.dg.graph.children ?? []).map((c) => ({
     id: c.id,
     x: c.x ?? 0,
@@ -231,17 +231,14 @@ function elkBoxes(model: ModelState) {
   }));
 }
 
-/**
- * Place every node of `model` over `pos` and write the result back. Ids absent
- * from the model keep their entry, so an editor undo of a delete finds its
- * old spot; Export writes only the model's ids.
- * ponytail: stale ids accumulate until Tidy, New or Open; a new node reusing
- * such a name lands on its old spot.
- */
-function placeOver(model: ModelState, pos: Map<string, Point>, hints: Map<string, Point>) {
-  const base = new Map(pos);
-  for (const id of hints.keys()) base.delete(id); // a gesture beats a stale entry
-  return new Map([...base, ...placeNodes(elkBoxes(model), base, hints, model.ir.signals)]);
+/** Place every node of `model` over `pos`; see placement's placeOver. */
+function placeModel(
+  model: ModelState,
+  pos: Map<string, Point>,
+  hints: Map<string, Point>,
+  known?: Set<string>,
+) {
+  return placeOver(elkBoxes(model), model.ir.signals, pos, hints, known);
 }
 
 /** Hints for a source actor created at `at`: the actor there, its io pills either side. */
@@ -252,30 +249,6 @@ function sourceActorHints(created: string[], at: Point): [string, Point][] {
     [inSig!, { x: at.x - IO_HINT_OFFSET, y: at.y }],
     [outSig!, { x: at.x + IO_HINT_OFFSET, y: at.y }],
   ];
-}
-
-/**
- * Middle of an edge as rendered: elk's end points moved with their nodes'
- * pinned positions (the handles), then averaged.
- */
-function edgeMidpoint(
-  model: ModelState,
-  edgeId: string,
-  positions: Map<string, Point>,
-): Point | null {
-  const e = model.dg.graph.edges?.find((x) => x.id === edgeId);
-  const section = e?.sections?.[0];
-  if (!e || !section) return null;
-  const moved = (ref: string | undefined, p: Point): Point => {
-    const id = (ref ?? '').split('.')[0]!;
-    const elk = model.dg.graph.children?.find((c) => c.id === id);
-    const pin = positions.get(id);
-    if (!elk || !pin) return p;
-    return { x: p.x + pin.x - (elk.x ?? 0), y: p.y + pin.y - (elk.y ?? 0) };
-  };
-  const a = moved(e.sources[0], section.startPoint);
-  const b = moved(e.targets[0], section.endPoint);
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 /** Signal carried by a source handle: `proc.out.sig` or `sig.io.src`. */
@@ -297,6 +270,9 @@ export function App() {
   const [example, setExample] = useState(initial.example);
   // node positions keyed by process or io signal name; empty means pure elk layout
   const [positions, setPositions] = useState(initial.positions);
+  // the replaced document's positions, shown until its model leaves the screen,
+  // so the old diagram does not re-lay out under the new document's positions
+  const [heldPositions, setHeldPositions] = useState<Map<string, Point> | null>(null);
   // the model on screen, for handlers and callbacks that must not go stale;
   // updated after the diagram's effects, so a fit consults the committed model
   const modelRef = useRef(model);
@@ -337,12 +313,16 @@ export function App() {
   const [prevModel, setPrevModel] = useState<typeof model>(null);
   if (model !== prevModel) {
     setPrevModel(model);
-    // pinned: place new nodes and write them back so they stay put; drops removed ids
+    // pinned: place new nodes and write them back so they stay put; keeps removed ids.
+    // A new document's first model has no known ids: every entry is its own.
     if (model && positions.size) {
       let pos = positions;
       for (const [from, to] of renames) pos = renameKey(pos, from, to);
-      setPositions(placeOver(model, pos, hints));
+      const known =
+        prevModel && !heldPositions ? new Set(elkBoxes(prevModel).map((b) => b.id)) : undefined;
+      setPositions(placeModel(model, pos, hints, known));
     }
+    if (model && heldPositions) setHeldPositions(null);
     if (model && hints.size) setHints(new Map());
     if (model && renames.length) setRenames([]);
     if (model && prevModel) {
@@ -420,19 +400,23 @@ export function App() {
       if (editorRef.current?.getDoc() !== baselineRef.current || layoutEditedRef.current) {
         if (!window.confirm(`Discard unsaved changes and ${what}?`)) return false;
       }
-      // same text (reopening the file on screen): no new model will come to place it
+      // same text (reopening the file on screen): no new model will come to place
+      // it or to consume a pending fit, so place and fit now
       const m = modelRef.current;
+      const same = m?.source === text;
       setExample(from);
-      setPositions(m && m.source === text && pos.size ? placeOver(m, pos, new Map()) : pos);
+      if (m && !same) setHeldPositions((h) => h ?? positions);
+      setPositions(m && same && pos.size ? placeModel(m, pos, new Map()) : pos);
       setPopover(null);
       setMenu(null);
       setNotice(null); // Tidy's undo belongs to the old document
       markSaved(text);
-      pendingFit.current = text;
+      pendingFit.current = same ? null : text;
+      if (same) setFitRequest((n) => n + 1);
       editorRef.current?.setSource(text);
       return true;
     },
-    [markSaved],
+    [markSaved, positions],
   );
 
   const loadExample = useCallback(
@@ -458,9 +442,11 @@ export function App() {
 
   const onExportHs = () => {
     const doc = editorRef.current?.getDoc() ?? '';
-    // stale ids kept for editor undo are not part of the file
+    // stale ids kept for editor undo are not part of the file; filter only by
+    // the model of this very text, else (errors, debounce) keep every position
     const ids = new Set(model?.dg.graph.children?.map((c) => c.id));
-    const saved = model ? new Map([...positions].filter(([id]) => ids.has(id))) : positions;
+    const saved =
+      model?.source === doc ? new Map([...positions].filter(([id]) => ids.has(id))) : positions;
     const url = URL.createObjectURL(
       new Blob([writeLayoutBlock(doc, saved)], { type: 'text/x-haskell' }),
     );
@@ -626,14 +612,18 @@ export function App() {
     setFitRequest((n) => n + 1);
     if (!positions.size) return;
     const prev = positions;
+    const prevEdited = layoutEditedRef.current;
     layoutEditedRef.current = true;
+    setHeldPositions(null);
     setPositions(new Map());
     setNotice({
       text: 'automatic layout restored',
       undo: () => {
+        // cleared flag: a save since Tidy wrote the tidy layout, so this differs from it
+        layoutEditedRef.current = layoutEditedRef.current ? prevEdited : true;
         // the text may have changed since Tidy: place against the current model
         const m = modelRef.current;
-        setPositions(m ? placeOver(m, prev, new Map()) : prev);
+        setPositions(m ? placeModel(m, prev, new Map()) : prev);
         setNotice(null);
         setFitRequest((n) => n + 1);
       },
@@ -705,7 +695,7 @@ export function App() {
           if (!meta) return;
           const kind = action === 'insert-actor' ? 'actor' : 'delay';
           const r = insertOnEdge(model.source, model.ir, meta.sig, kind);
-          const mid = edgeMidpoint(model, menu.target.edgeId, positions);
+          const mid = edgeMidpoint(model.dg.graph, menu.target.edgeId, positions);
           if (mid) setHints((h) => new Map(h).set(r.created[0]!, mid));
           queueRenames(outputRenames(model.ir, r.splices));
           editor.applySplices(r.splices);
@@ -858,10 +848,11 @@ export function App() {
             onDropInsert={onDropInsert}
             onConnectRefused={onConnectRefused}
             flash={flash}
-            positions={positions}
+            positions={heldPositions ?? positions}
             onPin={(pinned) => {
               // merge: ids off screen (a stale diagram after Open) keep their spot
               layoutEditedRef.current = true;
+              setHeldPositions(null);
               setPositions((p) => new Map([...p, ...pinned]));
             }}
           />
@@ -909,7 +900,7 @@ export function App() {
               onInserted={(proc) => {
                 const mid =
                   popover.target.kind === 'edge'
-                    ? edgeMidpoint(model, popover.target.edgeId, positions)
+                    ? edgeMidpoint(model.dg.graph, popover.target.edgeId, positions)
                     : null;
                 if (mid) setHints((h) => new Map(h).set(proc, mid));
               }}

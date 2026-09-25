@@ -24,8 +24,9 @@ npm run build    # production bundle (dist/)
 
 Deploys to GitHub Pages from `main` via `.github/workflows/deploy.yml`.
 
-The working copy lives in localStorage under the keys `source`, `baseline`,
-`example` and `positions`; clear site data to reset to the default example.
+The working copy (text, baseline, example, positions and the layout-edited
+flag) lives in localStorage as one JSON object under the key `workingCopy`;
+clear site data to reset to the default example.
 
 ## Editing from the diagram
 

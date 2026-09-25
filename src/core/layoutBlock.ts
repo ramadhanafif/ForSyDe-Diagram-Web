@@ -19,12 +19,16 @@ const ANY_LAYOUT_RE = /^[ \t]*--[ \t]*@layout(\s|$)/;
 
 const isBlank = (line: string) => line.trim() === '';
 
-/** Later lines win for a repeated id; malformed lines are ignored. */
+/** Later lines win for a repeated id; malformed or non-finite lines are ignored. */
 export function parseLayoutBlock(source: string): Map<string, Point> {
   const positions = new Map<string, Point>();
   for (const line of source.split('\n')) {
     const m = LAYOUT_LINE_RE.exec(line);
-    if (m) positions.set(m[1]!, { x: Number(m[2]), y: Number(m[3]) });
+    if (!m) continue;
+    const x = Number(m[2]);
+    const y = Number(m[3]);
+    // a few hundred digits overflow to Infinity
+    if (Number.isFinite(x) && Number.isFinite(y)) positions.set(m[1]!, { x, y });
   }
   return positions;
 }

@@ -49,6 +49,8 @@ export function ElkEdge({ id, data, sourceX, sourceY, targetX, targetY }: EdgePr
   let end: { x: number; y: number };
   let mid: { x: number; y: number };
   if (data.pinned) {
+    // ponytail: smoothstep between fixed Right/Left handles can cross nodes and
+    // wraps backward edges; Tidy restores elk routing, per-edge routing if users complain
     const [path, labelX, labelY] = getSmoothStepPath({
       sourceX,
       sourceY,

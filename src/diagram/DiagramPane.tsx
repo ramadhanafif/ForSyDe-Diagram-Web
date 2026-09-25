@@ -114,17 +114,15 @@ function Diagram(props: Props) {
   // node positions are live (draggable); edges/labels derive from them below
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   const { flash } = props;
-  useEffect(
-    () =>
-      setNodes(
-        flash.length
-          ? computed.nodes.map((n) =>
-              flash.includes(n.id) ? { ...n, className: 'just-added' } : n,
-            )
-          : computed.nodes,
-      ),
-    [computed, setNodes, flash],
-  );
+  useEffect(() => {
+    // a reset mid-drag would snap the dragged node back; drag stop re-runs this
+    if (dragging) return;
+    setNodes(
+      flash.length
+        ? computed.nodes.map((n) => (flash.includes(n.id) ? { ...n, className: 'just-added' } : n))
+        : computed.nodes,
+    );
+  }, [computed, setNodes, flash, dragging]);
 
   const edges: FlowEdge[] = useMemo(
     () =>

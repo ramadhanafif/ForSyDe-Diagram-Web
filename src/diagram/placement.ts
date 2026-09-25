@@ -1,3 +1,4 @@
+import type { ElkNode } from 'elkjs/lib/elk-api';
 import type { Point } from '../core/layoutBlock';
 import { LAYER_SPACING, NODE_SPACING } from './toElk';
 
@@ -25,7 +26,8 @@ function overlaps(a: PlacedBox, b: PlacedBox): boolean {
  * (a gesture's desired center), else right of a placed producer, else below
  * the lowest placed node at the leftmost x. Hinted and producer-placed nodes
  * step down past overlaps. Only ids in `elkNodes` are returned. Nodes
- * with a placed producer resolve first; a cycle with nothing placed falls
+ * with a placed producer resolve first, then sources (no incoming signal), so
+ * an input pill lands left of its actor; a cycle with nothing placed falls
  * back to the first unresolved node in elk order.
  */
 export function placeNodes(
@@ -62,6 +64,7 @@ export function placeNodes(
   // ponytail: O(n^2 * signals) rescans, fine for hand-drawn diagrams
   while (pending.length > 0) {
     let i = pending.findIndex((n) => producerOf(n.id));
+    if (i < 0) i = pending.findIndex((n) => !signals.some((s) => s.target.name === n.id));
     if (i < 0) i = 0;
     const n = pending.splice(i, 1)[0]!;
     const producer = producerOf(n.id);
@@ -102,7 +105,10 @@ function stepDown(box: PlacedBox, placed: Map<string, PlacedBox>): Point {
   return { x: box.x, y: box.y };
 }
 
-/** Carry a position over a rename; returns a new map, input untouched. */
+/**
+ * Carry a position over a rename; returns a new map, input untouched. The old
+ * id keeps its entry as a stale one, so an editor undo of the rename finds it.
+ */
 export function renameKey(
   positions: Map<string, Point>,
   oldId: string,
@@ -110,8 +116,58 @@ export function renameKey(
 ): Map<string, Point> {
   const out = new Map(positions);
   const p = out.get(oldId);
-  if (p === undefined) return out;
-  out.delete(oldId);
-  out.set(newId, p);
+  if (p !== undefined) out.set(newId, p);
   return out;
+}
+
+/**
+ * Place every node over `positions` and return the merged map. Ids absent
+ * from `nodes` keep their entry, so an editor undo of a delete finds its old
+ * spot; Export writes only the model's ids. `known` is the ids on screen
+ * before this model: a node outside it whose name has a stored entry (undo,
+ * or a fresh name reusing a deleted one) is placed there as a hint, so it
+ * steps down rather than cover a node that moved into that spot.
+ * ponytail: stale ids accumulate until Tidy, New or Open.
+ */
+export function placeOver(
+  nodes: PlacedBox[],
+  signals: SignalLink[],
+  positions: Map<string, Point>,
+  hints: Map<string, Point>,
+  known?: Set<string>,
+): Map<string, Point> {
+  const base = new Map(positions);
+  const all = new Map(hints);
+  for (const id of hints.keys()) base.delete(id); // a gesture beats a stale entry
+  for (const n of nodes) {
+    const p = base.get(n.id);
+    if (!known || known.has(n.id) || !p) continue;
+    base.delete(n.id);
+    all.set(n.id, { x: p.x + n.width / 2, y: p.y + n.height / 2 });
+  }
+  return new Map([...base, ...placeNodes(nodes, base, all, signals)]);
+}
+
+/**
+ * Middle of an edge as rendered: elk's end points moved with their nodes'
+ * pinned positions (the handles), then averaged. Port ids are `node.dir.sig`.
+ */
+export function edgeMidpoint(
+  graph: ElkNode,
+  edgeId: string,
+  positions: Map<string, Point>,
+): Point | null {
+  const e = graph.edges?.find((x) => x.id === edgeId);
+  const section = e?.sections?.[0];
+  if (!e || !section) return null;
+  const moved = (ref: string | undefined, p: Point): Point => {
+    const id = (ref ?? '').split('.')[0]!;
+    const elk = graph.children?.find((c) => c.id === id);
+    const pin = positions.get(id);
+    if (!elk || !pin) return p;
+    return { x: p.x + pin.x - (elk.x ?? 0), y: p.y + pin.y - (elk.y ?? 0) };
+  };
+  const a = moved(e.sources[0], section.startPoint);
+  const b = moved(e.targets[0], section.endPoint);
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }

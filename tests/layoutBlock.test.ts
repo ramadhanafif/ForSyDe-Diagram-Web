@@ -21,6 +21,13 @@ describe('layout block', () => {
     );
   });
 
+  it('ignores coordinates that overflow to Infinity', () => {
+    const huge = '1' + '0'.repeat(400);
+    expect(parseLayoutBlock(`-- @layout a ${huge} 0\n-- @layout b 1 2\n`)).toEqual(
+      new Map([['b', { x: 1, y: 2 }]]),
+    );
+  });
+
   it('parses what it writes', () => {
     expect(parseLayoutBlock(writeLayoutBlock(SRC, POS))).toEqual(
       new Map([
