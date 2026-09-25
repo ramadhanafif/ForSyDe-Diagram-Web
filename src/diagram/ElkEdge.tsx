@@ -1,4 +1,4 @@
-import { BaseEdge, type EdgeProps } from '@xyflow/react';
+import { BaseEdge, getSmoothStepPath, Position, type EdgeProps } from '@xyflow/react';
 import type { FlowEdge } from './toFlow';
 import { splitSubscript } from './labels';
 
@@ -36,17 +36,40 @@ function MathText({
   );
 }
 
-/** Renders elk's routed orthogonal path verbatim; React Flow never re-routes. */
-export function ElkEdge({ id, data }: EdgeProps<FlowEdge>) {
+/**
+ * Renders elk's routed orthogonal path verbatim. In a pinned layout elk's
+ * route no longer matches the nodes, so React Flow's smoothstep path runs
+ * between the handles instead.
+ */
+export function ElkEdge({ id, data, sourceX, sourceY, targetX, targetY }: EdgeProps<FlowEdge>) {
   if (!data) return null;
   const { points, meta, showUnitRates } = data;
-  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-  const start = points[0]!;
-  const end = points[points.length - 1]!;
-  const mid =
-    points.length === 2
-      ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
-      : points[Math.floor(points.length / 2)]!;
+  let d: string;
+  let start: { x: number; y: number };
+  let end: { x: number; y: number };
+  let mid: { x: number; y: number };
+  if (data.pinned) {
+    const [path, labelX, labelY] = getSmoothStepPath({
+      sourceX,
+      sourceY,
+      sourcePosition: Position.Right,
+      targetX,
+      targetY,
+      targetPosition: Position.Left,
+    });
+    d = path;
+    start = { x: sourceX, y: sourceY };
+    end = { x: targetX, y: targetY };
+    mid = { x: labelX, y: labelY };
+  } else {
+    d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    start = points[0]!;
+    end = points[points.length - 1]!;
+    mid =
+      points.length === 2
+        ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+        : points[Math.floor(points.length / 2)]!;
+  }
 
   return (
     <>

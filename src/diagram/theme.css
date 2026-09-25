@@ -977,6 +977,13 @@ body {
   z-index: 6;
 }
 
+.notice-toast button {
+  margin-left: 10px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
 /* dark-mode polish for the editor chrome */
 [data-theme='dark'] .cm-editor .cm-gutters {
   background: var(--bg-panel);

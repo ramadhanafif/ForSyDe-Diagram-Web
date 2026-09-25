@@ -7,6 +7,7 @@ import { parseLayoutBlock, stripLayoutBlock, writeLayoutBlock, type Point } from
 import type { ScheduleResult } from '../core/schedule';
 import { Menu, menuItems, type MenuTarget } from '../diagram/ContextMenu';
 import { findDefinitionOffset } from '../diagram/labels';
+import { placeNodes, renameKey } from '../diagram/placement';
 import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
@@ -22,7 +23,7 @@ import {
 } from './storage';
 import { Toolbar } from './Toolbar';
 import { startTour, TOUR_SEEN_KEY } from './tour';
-import { usePipeline } from './usePipeline';
+import { usePipeline, type ModelState } from './usePipeline';
 
 type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
 
@@ -189,6 +190,8 @@ const BASELINE_KEY = 'baseline';
 /** Example the text came from, '' for a new or opened file. */
 const EXAMPLE_KEY = 'example';
 const POSITIONS_KEY = 'positions';
+/** Horizontal distance from a new source actor's center to its io nodes' centers. */
+const IO_HINT_OFFSET = 110;
 
 const DEFAULT_EXAMPLE = examples.find((e) => e.name === 'SDF_example_002') ?? examples[0];
 
@@ -203,6 +206,41 @@ const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
 
 const initialDiagramTheme = (): 'modern' | 'lecture' =>
   storageGet('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
+
+/** Elk's boxes for every node of a laid-out model, placement's input. */
+function elkBoxes(model: ModelState) {
+  return (model.dg.graph.children ?? []).map((c) => ({
+    id: c.id,
+    x: c.x ?? 0,
+    y: c.y ?? 0,
+    width: c.width ?? 0,
+    height: c.height ?? 0,
+  }));
+}
+
+/**
+ * Middle of an edge as rendered: elk's end points moved with their nodes'
+ * pinned positions (the handles), then averaged.
+ */
+function edgeMidpoint(
+  model: ModelState,
+  edgeId: string,
+  positions: Map<string, Point>,
+): Point | null {
+  const e = model.dg.graph.edges?.find((x) => x.id === edgeId);
+  const section = e?.sections?.[0];
+  if (!e || !section) return null;
+  const moved = (ref: string | undefined, p: Point): Point => {
+    const id = (ref ?? '').split('.')[0]!;
+    const elk = model.dg.graph.children?.find((c) => c.id === id);
+    const pin = positions.get(id);
+    if (!elk || !pin) return p;
+    return { x: p.x + pin.x - (elk.x ?? 0), y: p.y + pin.y - (elk.y ?? 0) };
+  };
+  const a = moved(e.sources[0], section.startPoint);
+  const b = moved(e.targets[0], section.endPoint);
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
 
 /** Signal carried by a source handle: `proc.out.sig` or `sig.io.src`. */
 function handleSignal(handle: string): string | null {
@@ -235,11 +273,11 @@ export function App() {
   const [legendOpen, setLegendOpen] = useState(false);
   useEffect(() => storageSet('showFlags', JSON.stringify(showFlags)), [showFlags]);
 
-  // transient toast for refused gestures
-  const [notice, setNotice] = useState('');
+  // transient toast for refused gestures, optionally with an undo action
+  const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(''), NOTICE_TIMEOUT_MS);
+    const t = setTimeout(() => setNotice(null), NOTICE_TIMEOUT_MS);
     return () => clearTimeout(t);
   }, [notice]);
 
@@ -247,12 +285,24 @@ export function App() {
   const [diagramTheme, setDiagramTheme] = useState(initialDiagramTheme);
   const [fitRequest, setFitRequest] = useState(0);
 
+  // gesture points (node centers) and popover renames waiting for the model they produce
+  const [hints, setHints] = useState<Map<string, Point>>(() => new Map());
+  const [renames, setRenames] = useState<[string, string][]>([]);
+
   // when processes appear or disappear, pulse the new ones and re-fit;
   // derived-during-render pattern so no setState-in-effect
   const [flash, setFlash] = useState<string[]>([]);
   const [prevModel, setPrevModel] = useState<typeof model>(null);
   if (model !== prevModel) {
     setPrevModel(model);
+    // pinned: place new nodes and write them back so they stay put; drops removed ids
+    if (model && positions.size) {
+      let pos = positions;
+      for (const [from, to] of renames) pos = renameKey(pos, from, to);
+      setPositions(placeNodes(elkBoxes(model), pos, hints, model.ir.signals));
+    }
+    if (model && hints.size) setHints(new Map());
+    if (model && renames.length) setRenames([]);
     if (model && prevModel) {
       const names = model.ir.processes.map((p) => p.name);
       const prev = prevModel.ir.processes.map((p) => p.name);
@@ -340,7 +390,7 @@ export function App() {
       .then((text) =>
         replaceDoc(stripLayoutBlock(text), '', parseLayoutBlock(text), `open ${file.name}`),
       )
-      .catch(() => setNotice(`could not read ${file.name}`));
+      .catch(() => setNotice({ text: `could not read ${file.name}` }));
   };
 
   const onExportHs = () => {
@@ -424,7 +474,7 @@ export function App() {
     (sourceHandle: string, targetHandle: string) => {
       if (!model) return;
       if (editorRef.current?.getDoc() !== model.source) {
-        setNotice('diagram is stale, try again once it updates');
+        setNotice({ text: 'diagram is stale, try again once it updates' });
         return;
       }
       const sig = handleSignal(sourceHandle);
@@ -441,12 +491,12 @@ export function App() {
   // (black nodes); pin the live values for the snapshot, then restore.
   const onExportPng = useCallback(() => {
     if (exportingRef.current) {
-      setNotice('export in progress');
+      setNotice({ text: 'export in progress' });
       return;
     }
     const el = paneRef.current;
     if (!el) {
-      setNotice('nothing to export yet');
+      setNotice({ text: 'nothing to export yet' });
       return;
     }
     exportingRef.current = true;
@@ -473,7 +523,7 @@ export function App() {
     } catch {
       restore();
       exportingRef.current = false;
-      setNotice('export failed');
+      setNotice({ text: 'export failed' });
       return;
     }
     void toPng(el, {
@@ -498,42 +548,65 @@ export function App() {
         a.download = 'diagram.png';
         a.click();
       })
-      .catch(() => setNotice('export failed'))
+      .catch(() => setNotice({ text: 'export failed' }))
       .finally(() => {
         restore();
         exportingRef.current = false;
       });
   }, []);
 
+  const onTidy = () => {
+    setFitRequest((n) => n + 1);
+    if (!positions.size) return;
+    const prev = positions;
+    setPositions(new Map());
+    setNotice({
+      text: 'automatic layout restored',
+      undo: () => {
+        setPositions(prev);
+        setNotice(null);
+        setFitRequest((n) => n + 1);
+      },
+    });
+  };
+
   const onAddDelay = () => {
-    setNotice('a delay needs a signal: drag the delay chip onto an edge');
+    setNotice({ text: 'a delay needs a signal: drag the delay chip onto an edge' });
   };
 
   const onAddActor = () => {
     if (!model) return;
     if (editorRef.current?.getDoc() !== model.source) {
-      setNotice('diagram is stale, try again once it updates');
+      setNotice({ text: 'diagram is stale, try again once it updates' });
       return;
     }
     editorRef.current?.applySplices(addSourceActor(model.source, model.ir).splices);
   };
 
   const onDropInsert = useCallback(
-    (kind: 'actor' | 'delay', edgeId: string | null) => {
+    (kind: 'actor' | 'delay', edgeId: string | null, at: Point) => {
       if (!model) return;
       if (editorRef.current?.getDoc() !== model.source) {
-        setNotice('diagram is stale, try again once it updates');
+        setNotice({ text: 'diagram is stale, try again once it updates' });
         return;
       }
       if (edgeId) {
         const meta = model.dg.edgeMeta.get(edgeId);
         if (!meta) return;
-        editorRef.current?.applySplices(
-          insertOnEdge(model.source, model.ir, meta.sig, kind).splices,
-        );
+        const r = insertOnEdge(model.source, model.ir, meta.sig, kind);
+        setHints((h) => new Map(h).set(r.created[0]!, at));
+        editorRef.current?.applySplices(r.splices);
       } else if (kind === 'actor') {
         // dropped on empty canvas: a source actor; a floating delay has no valid text form
-        editorRef.current?.applySplices(addSourceActor(model.source, model.ir).splices);
+        const r = addSourceActor(model.source, model.ir);
+        const [proc, inSig, outSig] = r.created;
+        setHints((h) =>
+          new Map(h)
+            .set(proc!, at)
+            .set(inSig!, { x: at.x - IO_HINT_OFFSET, y: at.y })
+            .set(outSig!, { x: at.x + IO_HINT_OFFSET, y: at.y }),
+        );
+        editorRef.current?.applySplices(r.splices);
       }
     },
     [model],
@@ -544,7 +617,7 @@ export function App() {
     (action: string) => {
       if (!model || !menu) return;
       if (editorRef.current?.getDoc() !== model.source) {
-        setNotice('diagram is stale, try again once it updates');
+        setNotice({ text: 'diagram is stale, try again once it updates' });
         return;
       }
       const editor = editorRef.current!;
@@ -562,9 +635,11 @@ export function App() {
         const meta = model.dg.edgeMeta.get(menu.target.edgeId);
         if (action === 'insert-actor' || action === 'insert-delay') {
           if (!meta) return;
-          editor.applySplices(
-            insertOnEdge(model.source, model.ir, meta.sig, action === 'insert-actor' ? 'actor' : 'delay').splices,
-          );
+          const kind = action === 'insert-actor' ? 'actor' : 'delay';
+          const r = insertOnEdge(model.source, model.ir, meta.sig, kind);
+          const mid = edgeMidpoint(model, menu.target.edgeId, positions);
+          if (mid) setHints((h) => new Map(h).set(r.created[0]!, mid));
+          editor.applySplices(r.splices);
           setMenu(null);
         } else if (action === 'rename-signal') {
           if (!meta) return;
@@ -609,7 +684,7 @@ export function App() {
         setPopover({ target: { kind: 'node', name: p.name }, x: menu.x, y: menu.y });
       }
     },
-    [model, menu],
+    [model, menu, positions],
   );
 
   const onContextMenu = useCallback(
@@ -627,7 +702,7 @@ export function App() {
       const sig = handleSignal(sourceHandle);
       const proc = targetHandle.split('.')[0];
       if (!sig || !proc) return;
-      setNotice(addInputError(model.ir, proc, sig) ?? 'connection not possible here');
+      setNotice({ text: addInputError(model.ir, proc, sig) ?? 'connection not possible here' });
     },
     [model],
   );
@@ -649,6 +724,7 @@ export function App() {
         onOpen={onOpen}
         onExportHs={onExportHs}
         onFit={() => setFitRequest((n) => n + 1)}
+        onTidy={onTidy}
         showSchedule={showSchedule}
         onToggleSchedule={() => setShowSchedule((v) => !v)}
         onAddActor={onAddActor}
@@ -712,6 +788,8 @@ export function App() {
             onDropInsert={onDropInsert}
             onConnectRefused={onConnectRefused}
             flash={flash}
+            positions={positions}
+            onPin={setPositions}
           />
           <div className="float-controls">
             <span className="detail-switch" title="Toggle each annotation on the diagram">
@@ -754,6 +832,14 @@ export function App() {
               model={model}
               editorRef={editorRef}
               onClose={() => setPopover(null)}
+              onInserted={(proc) => {
+                const mid =
+                  popover.target.kind === 'edge'
+                    ? edgeMidpoint(model, popover.target.edgeId, positions)
+                    : null;
+                if (mid) setHints((h) => new Map(h).set(proc, mid));
+              }}
+              onRenamed={(from, to) => setRenames((r) => [...r, [from, to]])}
             />
           )}
           {menu && model && (
@@ -780,7 +866,12 @@ export function App() {
             </div>
           )}
           {schedError && <div className="sched-banner">Not schedulable: {schedError}</div>}
-          {notice && <div className="notice-toast">{notice}</div>}
+          {notice && (
+            <div className="notice-toast">
+              {notice.text}
+              {notice.undo && <button onClick={notice.undo}>Undo</button>}
+            </div>
+          )}
           {showSchedule && pipe.schedule?.ok && (
             <SchedulePanel
               sched={pipe.schedule}

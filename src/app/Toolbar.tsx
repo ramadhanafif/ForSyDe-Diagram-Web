@@ -9,6 +9,7 @@ export interface ToolbarProps {
   onOpen(file: File): void;
   onExportHs(): void;
   onFit(): void;
+  onTidy(): void;
   showSchedule: boolean;
   onToggleSchedule(): void;
   onAddActor(): void;
@@ -62,6 +63,12 @@ export function Toolbar(p: ToolbarProps) {
           ))}
         </select>
         <button onClick={p.onFit}>Fit</button>
+        <button
+          title="Re-run the automatic layout, discarding dragged node positions"
+          onClick={p.onTidy}
+        >
+          Tidy
+        </button>
         <button
           className={p.showSchedule ? 'active' : ''}
           title="Show or hide the schedule results: firing order, repetitions and buffer sizes"

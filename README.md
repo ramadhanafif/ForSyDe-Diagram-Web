@@ -49,8 +49,11 @@ of truth:
   to a new system output
 - new actors get a runnable function stub appended to the file, for example
   `f_5 :: [Int] -> [Int]` with `f_5 _ = replicate 1 0`
-- nodes can be dragged to inspect a layout; positions are ephemeral and reset
-  at the next re-layout since they are not part of the source
+- dragging a node pins the whole layout: every node keeps its position across
+  edits, new nodes land where they were dropped or next to their producer, and
+  edges route as smoothstep lines between the ports; Tidy returns to the
+  automatic layout (with an Undo in the toast), and the positions travel in
+  exported .hs files
 
 The editor text and node positions autosave to the browser's localStorage and
 are restored on reload. New starts a blank model, Open .hs loads a file and
