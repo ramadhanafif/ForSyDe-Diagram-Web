@@ -67,11 +67,7 @@ export function stepPos(p: number, delta: 1 | -1, n: number, loops: boolean): nu
  * re-layout of the same text (SHOW toggles, style) keeps it. The timer runs
  * only while `active` (its controls are on screen).
  */
-export function useSimulation(
-  model: SceneModel | null,
-  connected: boolean,
-  active: boolean,
-): Simulation {
+export function useSimulation(model: SceneModel | null, active: boolean): Simulation {
   const period = useMemo(
     () => (model?.schedule.ok ? simulate(model.ir, model.schedule) : null),
     [model],
@@ -79,15 +75,10 @@ export function useSimulation(
   const stuck = useMemo(() => {
     const s = model?.schedule;
     if (!model || !s || s.ok) return null;
-    // a disconnected graph fails for a different reason, which the banner explains
-    if (
-      s.kind === 'deadlock' ||
-      s.kind === 'no-positive-vector' ||
-      (s.kind === 'rank' && connected)
-    )
+    if (s.kind === 'deadlock' || s.kind === 'no-positive-vector' || s.kind === 'rank')
       return simulateUntilStuck(model.ir, STUCK_FIRINGS);
     return null;
-  }, [model, connected]);
+  }, [model]);
   // no period: replay how the model fails, up to where it gets stuck
   const trace = useMemo(
     () => period ?? (stuck ? traceOf(stuck, false, STUCK_STEPS) : null),

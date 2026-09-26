@@ -190,9 +190,9 @@ export function App() {
   const pinned = usePinnedLayout(model, initial.positions);
   const { view, queueRenames, addHints } = pinned;
   const parts = useMemo(() => (model ? componentCount(model.ir) : 0), [model]);
-  const facts = useMemo(() => (model ? analyze(model.ir) : null), [model]);
+  const facts = useMemo(() => (model ? analyze(model.ir, model.schedule.rank) : null), [model]);
   const times = useMemo(() => parseTimes(model?.source ?? ''), [model]);
-  const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
+  const sim = useSimulation(model, showSchedule && scheduleOpen);
   const { trace, stuck, pos } = sim;
   // why there is no schedule, in the model's names, with a checked fix when one exists
   const explanation = useMemo(

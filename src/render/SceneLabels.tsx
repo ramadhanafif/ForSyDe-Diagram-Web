@@ -126,7 +126,7 @@ export const SceneLabels = memo(function SceneLabels({ model, style, flags }: Pr
           <div
             {...common}
             data-owner-edge={l.owner}
-            title={`buffer: ${sig} holds at most ${n} token${plural(n)} during one iteration of this schedule (the first ready actor fires, in declaration order)`}
+            title={`buffer: ${sig} holds at most ${n} token${plural(n)} during one iteration of this schedule (round robin: after a firing, the next ready actor in declaration order fires)`}
           >
             {/* the modern style draws a FIFO strip in the SVG layer under this box */}
             {style === 'lecture' ? `·${n}` : null}

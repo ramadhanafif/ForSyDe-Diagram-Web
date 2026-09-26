@@ -748,16 +748,13 @@ async function connect(page, fromSel, proc) {
 async function dragConnect(page, { url }) {
   await open(page, url);
   await load(page, MODEL);
-  const out = await edit(
-    page,
-    () => connect(page, '[data-port-id="a_b.out.s_out"]', 'a_a'),
-    'connect out port',
-  );
-  expect(
-    out.after.includes('a_a = actor21SDF (1, 1) 2 f'),
-    'connect out port: a_a constructor not bumped to actor21SDF',
-  );
-  expect(out.after.includes('s_1 = a_a s_in s_out'), 'connect out port: binding not extended');
+  // a system output fed back into an actor would split it implicitly: refused
+  const before = await doc(page);
+  await connect(page, '[data-port-id="a_b.out.s_out"]', 'a_a');
+  await waitFor(page, '.notice-toast', 'the refusal to connect an output');
+  const said = await page.eval(() => document.querySelector('.notice-toast').textContent);
+  expect(/split/.test(said), `connect out port said '${said}'`);
+  expect((await doc(page)) === before, 'connect out port changed the text');
   expect(await exists(page, '[data-port-id*=".out."]'), 'no out ports drawn');
 
   await load(page, MODEL_FREE_INPUT);
