@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { ElkNode } from 'elkjs/lib/elk-api';
 import {
   edgeMidpoint,
+  LAYER_SPACING,
+  NODE_SPACING,
   placeNodes,
   placeOver,
   renameKey,
   type PlacedBox,
 } from '../src/diagram/placement';
-import { LAYER_SPACING, NODE_SPACING } from '../src/diagram/toElk';
+import type { Scene } from '../src/scene/types';
 
 const box = (id: string, x = 0, y = 0, width = 60, height = 60): PlacedBox => ({
   id,
@@ -171,28 +172,28 @@ describe('placeOver', () => {
 });
 
 describe('edgeMidpoint', () => {
-  it("shifts each end point by its pinned node's delta", () => {
-    const graph: ElkNode = {
-      id: 'root',
-      children: [
-        { id: 'a', x: 0, y: 0 },
-        { id: 'b', x: 100, y: 0 },
-      ],
+  it('averages the end points of the edge as drawn', () => {
+    const scene = {
+      nodes: [],
+      labels: [],
+      bounds: { x: 0, y: 0, w: 0, h: 0 },
       edges: [
         {
           id: 'e',
-          sources: ['a.out.s'],
-          targets: ['b.in.s'],
-          sections: [{ id: 's', startPoint: { x: 60, y: 30 }, endPoint: { x: 100, y: 30 } }],
+          signal: 's',
+          source: 'a.out.s',
+          target: 'b.in.s',
+          points: [
+            { x: 60, y: 30 },
+            { x: 80, y: 30 },
+            { x: 80, y: 50 },
+            { x: 100, y: 50 },
+          ],
+          feedback: false,
         },
       ],
-    };
-    expect(edgeMidpoint(graph, 'e', new Map())).toEqual({ x: 80, y: 30 });
-    // b pinned 40 right and 20 down of elk's spot
-    expect(edgeMidpoint(graph, 'e', new Map([['b', { x: 140, y: 20 }]]))).toEqual({
-      x: 100,
-      y: 40,
-    });
-    expect(edgeMidpoint(graph, 'missing', new Map())).toBeNull();
+    } satisfies Scene;
+    expect(edgeMidpoint(scene, 'e')).toEqual({ x: 80, y: 40 });
+    expect(edgeMidpoint(scene, 'missing')).toBeNull();
   });
 });

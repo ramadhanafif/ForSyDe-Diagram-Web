@@ -1,8 +1,12 @@
-import type { ElkNode } from 'elkjs/lib/elk-api';
 import type { Point } from '../core/layoutBlock';
-import { LAYER_SPACING, NODE_SPACING } from './toElk';
+import type { Scene } from '../scene/types';
 
-/** An elk-laid-out node: the only geometry placement needs. */
+/** Gap between a producer and a node placed to its right. */
+export const LAYER_SPACING = 64;
+/** Gap below a node that another is stepped down past. */
+export const NODE_SPACING = 44;
+
+/** A laid-out node box: the only geometry placement needs. */
 export interface PlacedBox {
   id: string;
   x: number;
@@ -25,13 +29,13 @@ function overlaps(a: PlacedBox, b: PlacedBox): boolean {
  * Final positions for pinned mode. Per node: stored position, else the hint
  * (a gesture's desired center), else right of a placed producer, else below
  * the lowest placed node at the leftmost x. Hinted and producer-placed nodes
- * step down past overlaps. Only ids in `elkNodes` are returned. Nodes
+ * step down past overlaps. Only ids in `nodes` are returned. Nodes
  * with a placed producer resolve first, then sources (no incoming signal), so
  * an input pill lands left of its actor; a cycle with nothing placed falls
- * back to the first unresolved node in elk order.
+ * back to the first unresolved node in layout order.
  */
 export function placeNodes(
-  elkNodes: PlacedBox[],
+  nodes: PlacedBox[],
   positions: Map<string, Point>,
   hints: Map<string, Point>,
   signals: SignalLink[],
@@ -41,7 +45,7 @@ export function placeNodes(
 
   const pending: PlacedBox[] = [];
   const hinted: PlacedBox[] = [];
-  for (const n of elkNodes) {
+  for (const n of nodes) {
     const stored = positions.get(n.id);
     if (stored) put(n, stored);
     else if (hints.has(n.id)) hinted.push(n);
@@ -149,25 +153,13 @@ export function placeOver(
 }
 
 /**
- * Middle of an edge as rendered: elk's end points moved with their nodes'
- * pinned positions (the handles), then averaged. Port ids are `node.dir.sig`.
+ * Middle of an edge as drawn, from `scene`, the scene on screen (pinned
+ * positions already applied): the average of its two end points.
  */
-export function edgeMidpoint(
-  graph: ElkNode,
-  edgeId: string,
-  positions: Map<string, Point>,
-): Point | null {
-  const e = graph.edges?.find((x) => x.id === edgeId);
-  const section = e?.sections?.[0];
-  if (!e || !section) return null;
-  const moved = (ref: string | undefined, p: Point): Point => {
-    const id = (ref ?? '').split('.')[0]!;
-    const elk = graph.children?.find((c) => c.id === id);
-    const pin = positions.get(id);
-    if (!elk || !pin) return p;
-    return { x: p.x + pin.x - (elk.x ?? 0), y: p.y + pin.y - (elk.y ?? 0) };
-  };
-  const a = moved(e.sources[0], section.startPoint);
-  const b = moved(e.targets[0], section.endPoint);
+export function edgeMidpoint(scene: Scene, edgeId: string): Point | null {
+  const pts = scene.edges.find((e) => e.id === edgeId)?.points;
+  if (!pts?.length) return null;
+  const a = pts[0]!;
+  const b = pts[pts.length - 1]!;
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }

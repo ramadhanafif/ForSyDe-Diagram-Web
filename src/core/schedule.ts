@@ -42,6 +42,8 @@ export type ScheduleResult =
     }
   | { ok: false; kind: ScheduleErrorKind; message: string };
 
+export type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
+
 function err(kind: ScheduleErrorKind, message: string): ScheduleResult {
   return { ok: false, kind, message };
 }

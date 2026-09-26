@@ -53,7 +53,11 @@ export function menuItems(target: MenuTarget, ir: IRSystem | null): MenuItem[] {
     { label: 'set rates', action: 'rates' },
     { label: 'set function', action: 'function' },
     p.function === 'NULL'
-      ? { label: 'goto definition', action: 'goto-definition', disabledReason: 'function is undefined' }
+      ? {
+          label: 'goto definition',
+          action: 'goto-definition',
+          disabledReason: 'function is undefined',
+        }
       : { label: `goto ${p.function}`, action: 'goto-definition' },
     deleteItem(ir, p.name),
   ];
@@ -80,7 +84,10 @@ export function Menu({ x, y, items, onPick, onClose }: MenuProps) {
     if (!el || !pane) return;
     setPos({
       x: Math.max(POPOVER_MARGIN, Math.min(x, pane.clientWidth - el.offsetWidth - POPOVER_MARGIN)),
-      y: Math.max(POPOVER_MARGIN, Math.min(y, pane.clientHeight - el.offsetHeight - POPOVER_MARGIN)),
+      y: Math.max(
+        POPOVER_MARGIN,
+        Math.min(y, pane.clientHeight - el.offsetHeight - POPOVER_MARGIN),
+      ),
     });
   }, [x, y]);
 
@@ -94,6 +101,17 @@ export function Menu({ x, y, items, onPick, onClose }: MenuProps) {
       style={{ left: pos.x, top: pos.y }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose();
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        // WAI-ARIA menu: the arrows cycle through the enabled items
+        e.preventDefault();
+        const rows = [
+          ...ref.current!.querySelectorAll<HTMLButtonElement>('[role=menuitem]:enabled'),
+        ];
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        const cur = rows.indexOf(document.activeElement as HTMLButtonElement);
+        // nothing focused: Down goes to the first item, Up to the last
+        const i = cur < 0 && step < 0 ? 0 : cur;
+        rows[(i + step + rows.length) % rows.length]?.focus();
       }}
     >
       {items.map((item, i) => (
