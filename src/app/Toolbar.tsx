@@ -28,8 +28,10 @@ export interface ToolbarProps {
   onTour(): void;
   /** The simulation is playing. */
   animating: boolean;
-  /** There is something to play: a schedule period, or a run that gets stuck. */
+  /** A model is on screen; Animate explains itself when it has nothing to play. */
   canAnimate: boolean;
+  /** Why there is nothing to play (no schedule, errors); null when there is. */
+  animateBlocked?: string | null;
   onAnimate(): void;
   diagramTheme: 'modern' | 'lecture';
   onToggleDiagramTheme(): void;
@@ -87,9 +89,10 @@ export function Toolbar(p: ToolbarProps) {
           aria-pressed={p.animating}
           disabled={!p.canAnimate}
           title={
-            p.canAnimate
+            p.animateBlocked ??
+            (p.canAnimate
               ? 'Run the model: inputs produce tokens, they travel through the buffers and the actors fire'
-              : 'Nothing to run: fix the errors or connect the model first'
+              : 'Nothing to run: fix the errors or connect the model first')
           }
           onClick={p.onAnimate}
         >

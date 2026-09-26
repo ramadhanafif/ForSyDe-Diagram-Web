@@ -1654,6 +1654,62 @@ async function semanticZoom(page, { url }) {
   expect(back.rate && back.signal && back.strip, `after fit: ${JSON.stringify(back)}`);
 }
 
+// schedules nothing and leaves no stuck run to replay: a rate-2 self-loop through a delay
+const MODEL_NO_SCHEDULE = `module N where
+import ForSyDe.Shallow
+system s_in = s_out
+  where
+    (s_out, s_1) = a_a s_in s_2
+    s_2 = d_d s_1
+a_a = actor22SDF (1, 1) (1, 2) g
+d_d = delaySDF [0]
+g :: [Int] -> [Int] -> ([Int], [Int])
+g [x] [y] = ([x], [y, y])
+`;
+
+/** No schedule: a warning with the problems, and Animate and Schedule say why they show nothing. */
+async function noScheduleWarning(page, { url }) {
+  await open(page, url);
+  await load(page, MODEL_NO_SCHEDULE);
+  // listed with the editor's problems, as a warning that jumps to the actor at fault
+  const warn = await page.eval(() => window.__e2e.qa('.error-bar .warn').map((b) => b.textContent));
+  expect(
+    warn.length === 1 && /^Not schedulable: .*a_a/.test(warn[0]),
+    `error bar warnings [${warn}]`,
+  );
+  await clickSelectorCenter(page, '.error-bar .warn');
+  const line = await page.eval(
+    () => document.getSelection()?.anchorNode?.parentElement?.closest('.cm-line')?.textContent,
+  );
+  expect(/^a_a = actor22SDF/.test(line ?? ''), `the warning jumped to '${line}'`);
+  // Animate is not dead: it says why nothing plays
+  expect(
+    !(await page.eval(() => document.querySelector('.animate-button').disabled)),
+    'Animate is disabled with no reason',
+  );
+  await clickSelectorCenter(page, '.animate-button');
+  await waitFor(page, '.notice-toast', 'a toast from Animate');
+  const toast = await page.eval(() => document.querySelector('.notice-toast').textContent);
+  expect(/Not schedulable/.test(toast), `Animate said '${toast}'`);
+  expect(!(await exists(page, '.timeline [aria-label="pause"]')), 'something started playing');
+  // Schedule off, then on again: it explains itself too (once Animate's toast has gone)
+  await until(
+    async () => !(await exists(page, '.notice-toast')),
+    "Animate's toast to expire",
+    8000,
+  );
+  await clickButton(page, '.toolbar', 'Schedule');
+  expect(!(await exists(page, '.notice-toast')), 'switching the results off made a toast');
+  await clickButton(page, '.toolbar', 'Schedule');
+  await waitFor(page, '.notice-toast', 'a toast from Schedule');
+}
+
+async function clickSelectorCenter(page, selector) {
+  const at = await page.box(selector);
+  expect(at, `nothing at ${selector}`);
+  await page.click(at.x, at.y);
+}
+
 async function deadlockView(page, { url }) {
   await open(page, url);
   await load(page, MODEL_DEADLOCK);
@@ -2206,6 +2262,7 @@ export const scenarios = {
   simulate,
   bufferStrip,
   deadlockView,
+  noScheduleWarning,
   linkEditorToDiagram,
   linkDiagramToEditor,
   inlineEdit,
