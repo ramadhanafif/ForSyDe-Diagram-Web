@@ -62,7 +62,7 @@ const stepsFor = (hooks: TourHooks) =>
       popover: {
         title: 'Schedule',
         description:
-          'The static schedule as a playable timeline: step through one period and watch the buffers fill and drain. "analysis" shows the topology matrix, the balance equations and the repetition vector.',
+          'The static schedule as a playable timeline: step through one iteration and watch the buffers fill and drain. "analysis" shows the topology matrix, the balance equations and the repetition vector.',
       },
     },
   ].filter((s) => s !== null);

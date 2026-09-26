@@ -147,8 +147,8 @@ function Legend({ style }: { style: DiagramStyle }) {
         )}
         <span>
           {modern
-            ? 'buffer: one slot per token it must hold, filled slots hold tokens now'
-            : 'buffer: maximum tokens held on the signal'}
+            ? 'buffer: one slot per token it holds at most under this schedule, filled slots hold tokens now'
+            : 'buffer: maximum tokens held on the signal under this schedule'}
         </span>
       </div>
       <div className="legend-row">

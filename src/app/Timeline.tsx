@@ -84,7 +84,7 @@ export function Timeline({
     return (
       <button className="schedule-chip" title="Show the schedule timeline" onClick={onToggle}>
         {sched
-          ? `schedule: ${sched.schedule.length} firings, max buffer ${maxBuffer}`
+          ? `iteration: ${n} steps, max buffer ${maxBuffer}`
           : trace
             ? `stuck run: ${n} steps`
             : 'analysis'}
@@ -109,7 +109,7 @@ export function Timeline({
             <button
               aria-label={sim.playing ? 'pause' : 'play'}
               className="tl-play"
-              title="Play the period; it loops"
+              title="Play one iteration; it loops"
               onClick={sim.toggle}
             >
               {sim.playing ? '❚❚' : '▶'}
@@ -169,7 +169,7 @@ export function Timeline({
       {trace && (
         <div className="tl-scroll">
           <div className="tl-row">
-            <span className="tl-name">{trace.periodic ? 'period' : 'stuck run'}</span>
+            <span className="tl-name">{trace.periodic ? 'iteration' : 'stuck run'}</span>
             <span className="tl-cells">
               {trace.steps.map((s, i) => (
                 <button
@@ -191,7 +191,10 @@ export function Timeline({
           </div>
           {occupancy(trace).map(([sig, values, max]) => (
             <div key={sig} className="tl-row" data-signal={sig}>
-              <span className="tl-name" title={`${sig} holds at most ${max} tokens in one period`}>
+              <span
+                className="tl-name"
+                title={`${sig} holds at most ${max} tokens in one iteration of this schedule`}
+              >
                 {sig} <b>{max}</b>
               </span>
               <Sparkline values={values} max={max} pos={pos} />

@@ -7,6 +7,11 @@ import {
 import type { Target } from '../core/links';
 import type { ScheduleOk } from '../core/schedule';
 
+/** The other signals folded into buffer `name` (a delay's output signal). */
+const aliasesOf = (sched: ScheduleOk, name: string) => [
+  ...new Set([...sched.aliases].filter(([a, b]) => b === name && a !== name).map(([a]) => a)),
+];
+
 const rowName = (c: Channel) =>
   c.delay ? `${c.signal} (${c.delay}, ${c.tokens} token${c.tokens === 1 ? '' : 's'})` : c.signal;
 
@@ -98,11 +103,15 @@ export function Analysis({
       {sched && (
         <section>
           <h4>buffers for this schedule</h4>
+          <p className="an-note">
+            the first ready actor fires, in declaration order; another valid schedule can need less
+          </p>
           <table className="an-buffers">
             <tbody>
               {sched.buffers.map(([name, size]) => (
                 <tr key={name}>
-                  <td>{name}</td>
+                  {/* a delay's two signals share one buffer: name both, as the timeline does */}
+                  <td>{[name, ...aliasesOf(sched, name)].join(' / ')}</td>
                   <td>{size}</td>
                 </tr>
               ))}

@@ -1239,6 +1239,12 @@ body {
   font-weight: normal;
 }
 
+.analysis .an-note {
+  max-width: 220px;
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
 .analysis .an-zero {
   color: var(--fg-dim);
   opacity: 0.5;
