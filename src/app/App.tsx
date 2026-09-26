@@ -31,6 +31,7 @@ import {
 } from './storage';
 import { Toolbar, type ExportKind } from './Toolbar';
 import { Timeline } from './Timeline';
+import { scheduleWarning } from './scheduleWarning';
 import { download, sceneToSvg, svgToPngBlob } from '../export/svg';
 import { sceneToTikz, tikzPicture } from '../export/tikz';
 import { startTour, TOUR_SEEN_KEY } from './tour';
@@ -327,6 +328,24 @@ export function App() {
     [model, shownPositions],
   );
   const parts = useMemo(() => (model ? componentCount(model.ir) : 0), [model]);
+  // why there is no schedule; the rank error on a disconnected graph teaches the wrong concept
+  let schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
+  if (
+    schedError &&
+    pipe.schedule &&
+    !pipe.schedule.ok &&
+    pipe.schedule.kind === 'rank' &&
+    parts > 1
+  )
+    schedError = `the graph has ${parts} disconnected parts; every process must be connected to the rest of the system before a schedule exists`;
+  // the failure also lists with the editor's problems, as a warning on the text as it is
+  const diagnostics = useMemo(
+    () =>
+      schedError && model && model.source === source
+        ? [...pipe.diagnostics, scheduleWarning(model.ir, schedError)]
+        : pipe.diagnostics,
+    [schedError, model, source, pipe.diagnostics],
+  );
   const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
   const { trace, stuck, pos } = sim;
   const marks = useMemo(
@@ -385,7 +404,22 @@ export function App() {
     setScheduleOpen(true);
     sim.play();
   };
-  const onAnimate = () => (sim.playing ? sim.stop() : startAnimation());
+  /** Why Animate and the timeline have nothing to show; null when they do. */
+  const nothingToRun = trace
+    ? null
+    : schedError
+      ? `Not schedulable: ${schedError}`
+      : 'Nothing to run yet: fix the errors listed above the editor';
+  const onAnimate = () => {
+    if (sim.playing) return sim.stop();
+    if (nothingToRun) return setNotice({ text: nothingToRun });
+    startAnimation();
+  };
+  const onToggleSchedule = () => {
+    // switching the results on with none to show: say why instead of doing nothing visible
+    if (!showSchedule && nothingToRun) setNotice({ text: nothingToRun });
+    setShowSchedule((v) => !v);
+  };
   // the tour starts it from outside React's render, so it needs the latest one
   const animateRef = useRef(startAnimation);
   useEffect(() => {
@@ -861,17 +895,6 @@ export function App() {
     [paneCoords],
   );
 
-  // the rank error on a disconnected graph teaches the wrong concept
-  let schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
-  if (
-    schedError &&
-    pipe.schedule &&
-    !pipe.schedule.ok &&
-    pipe.schedule.kind === 'rank' &&
-    parts > 1
-  )
-    schedError = `the graph has ${parts} disconnected parts; every process must be connected to the rest of the system before a schedule exists`;
-
   return (
     <div className="app">
       <Toolbar
@@ -879,7 +902,7 @@ export function App() {
         onExample={loadExample}
         onFit={() => setFitRequest((n) => n + 1)}
         showSchedule={showSchedule}
-        onToggleSchedule={() => setShowSchedule((v) => !v)}
+        onToggleSchedule={onToggleSchedule}
         onAddActor={onAddActor}
         onAddDelay={onAddDelay}
         onExport={(k) => void onExport(k)}
@@ -888,7 +911,8 @@ export function App() {
         onTidy={onTidy}
         onTour={() => void startTour(() => storageSet(TOUR_SEEN_KEY, '1'), tourHooks)}
         animating={sim.playing}
-        canAnimate={!!trace}
+        canAnimate={!!model}
+        animateBlocked={nothingToRun}
         onAnimate={onAnimate}
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
@@ -897,14 +921,14 @@ export function App() {
       <main className="panes" ref={panesRef} style={{ ['--split' as string]: splitRatio }}>
         <section className="pane editor-pane">
           <ErrorBar
-            diagnostics={pipe.diagnostics}
+            diagnostics={diagnostics}
             onGoto={(offset) => editorRef.current?.gotoOffset(offset)}
           />
           <EditorPane
             ref={editorRef}
             onChange={setSource}
             onCursor={setCursor}
-            diagnostics={pipe.diagnostics}
+            diagnostics={diagnostics}
             dark={appTheme === 'dark'}
           />
         </section>
