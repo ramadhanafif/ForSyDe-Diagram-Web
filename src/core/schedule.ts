@@ -44,7 +44,14 @@ export type ScheduleResult =
       /** Rank of the topology matrix, for analyze() so it need not row-reduce again. */
       rank: number;
     }
-  | { ok: false; kind: ScheduleErrorKind; message: string; rank?: number };
+  | {
+      ok: false;
+      kind: ScheduleErrorKind;
+      message: string;
+      rank?: number;
+      /** A deadlocked model: what each buffer held before its run got stuck (useScene sets it). */
+      buffers?: [string, number][];
+    };
 
 export type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
 

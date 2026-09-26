@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SceneMarks } from '../render/SceneShapes';
 import { edgeId } from '../scene/labels';
-import {
-  simulate,
-  simulateUntilStuck,
-  traceOf,
-  type SimTrace,
-  type StuckReport,
-} from '../sim/simulate';
+import { simulate, traceOf, type SimTrace, type StuckReport } from '../sim/simulate';
 import type { SceneModel } from './useScene';
 
 /** Step interval at 1x. */
@@ -16,8 +10,6 @@ const STEP_MS = 800;
 const TRAVEL_SHARE = 0.7;
 
 const travelMs = (speed: Speed) => (TRAVEL_SHARE * STEP_MS) / speed;
-/** Firings simulateUntilStuck may spend looking for a deadlock or a growing queue. */
-const STUCK_FIRINGS = 1000;
 /** Steps of a stuck run the timeline replays: enough to see it stall or a queue grow. */
 const STUCK_STEPS = 60;
 
@@ -72,13 +64,7 @@ export function useSimulation(model: SceneModel | null, active: boolean): Simula
     () => (model?.schedule.ok ? simulate(model.ir, model.schedule) : null),
     [model],
   );
-  const stuck = useMemo(() => {
-    const s = model?.schedule;
-    if (!model || !s || s.ok) return null;
-    if (s.kind === 'deadlock' || s.kind === 'no-positive-vector' || s.kind === 'rank')
-      return simulateUntilStuck(model.ir, STUCK_FIRINGS);
-    return null;
-  }, [model]);
+  const stuck = model?.stuck ?? null;
   // no period: replay how the model fails, up to where it gets stuck
   const trace = useMemo(
     () => period ?? (stuck ? traceOf(stuck, false, STUCK_STEPS) : null),

@@ -34,6 +34,8 @@ export interface EdgeMeta {
 }
 
 export interface SceneMeta {
+  /** The buffer sizes come from a deadlocked run, not from a schedule. */
+  stuckBuffers: boolean;
   /** By process name (io nodes have no meta). */
   nodes: Map<string, NodeMeta>;
   /** By edge id. */
@@ -73,9 +75,9 @@ export function sceneMeta(ir: IRSystem, schedule: ScheduleResult | null): SceneM
   for (const s of ir.signals) {
     // delays merge signals into one buffer; the schedule keys it by the alias
     const key = ok?.aliases.get(s.name) ?? s.name;
-    edges.set(edgeId(s), { buffer: ok?.buffers.find(([name]) => name === key)?.[1] });
+    edges.set(edgeId(s), { buffer: schedule?.buffers?.find(([name]) => name === key)?.[1] });
   }
-  return { nodes, edges };
+  return { stuckBuffers: !ok && !!schedule?.buffers, nodes, edges };
 }
 
 /**

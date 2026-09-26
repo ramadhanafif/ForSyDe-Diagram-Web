@@ -126,7 +126,11 @@ export const SceneLabels = memo(function SceneLabels({ model, style, flags }: Pr
           <div
             {...common}
             data-owner-edge={l.owner}
-            title={`buffer: ${sig} holds at most ${n} token${plural(n)} during one iteration of this schedule (round robin: after a firing, the next ready actor in declaration order fires)`}
+            title={
+              meta.stuckBuffers
+                ? `buffer: ${sig} holds at most ${n} token${plural(n)} before the model gets stuck`
+                : `buffer: ${sig} holds at most ${n} token${plural(n)} during one iteration of this schedule (round robin: after a firing, the next ready actor in declaration order fires)`
+            }
           >
             {/* the modern style draws a FIFO strip in the SVG layer under this box */}
             {style === 'lecture' ? `·${n}` : null}
