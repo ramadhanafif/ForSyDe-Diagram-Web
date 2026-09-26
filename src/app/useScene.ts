@@ -5,6 +5,7 @@ import type { IRSignal, IRSystem } from '../core/ir';
 import { parse } from '../core/parser';
 import { computeScheduleAndBuffers, type ScheduleResult } from '../core/schedule';
 import { layout } from '../layout';
+import { simulateUntilStuck, stuckBufferSizes, type StuckReport } from '../sim/simulate';
 import { edgeId, sceneMeta, type SceneMeta } from '../scene/labels';
 import type { DiagramStyle, LabelFlags, Measure, Scene } from '../scene/types';
 
@@ -18,7 +19,13 @@ export interface SceneModel {
   meta: SceneMeta;
   /** The IR signal each edge draws (diagram-driven editing needs its spans). */
   edgeSignals: Map<string, IRSignal>;
+  /** No schedule: the run up to where the model gets stuck, else null. */
+  stuck: StuckReport | null;
 }
+
+/** Firings simulateUntilStuck may spend looking for a deadlock or a growing queue. */
+const STUCK_FIRINGS = 1000;
+const REPLAYED: ReadonlySet<string> = new Set(['deadlock', 'no-positive-vector', 'rank']);
 
 export interface SceneState {
   diagnostics: Diagnostic[];
@@ -76,7 +83,12 @@ function pipeline(
   const allDiags = [...diagnostics, ...elabDiags];
   const errorCount = allDiags.filter((d) => d.severity === 'error').length;
   if (!ir) return { ...prev, diagnostics: allDiags, stale: true, errorCount };
-  const schedule = computeScheduleAndBuffers(ir);
+  let schedule = computeScheduleAndBuffers(ir);
+  const stuck =
+    !schedule.ok && REPLAYED.has(schedule.kind) ? simulateUntilStuck(ir, STUCK_FIRINGS) : null;
+  // a deadlock has no schedule to size its buffers: draw what its run held
+  if (!schedule.ok && stuck?.kind === 'deadlock')
+    schedule = { ...schedule, buffers: stuckBufferSizes(stuck) };
   let scene: Scene;
   try {
     scene = layout({ ir, schedule, flags, measure, style, prev: prev.model?.scene });
@@ -91,7 +103,7 @@ function pipeline(
   const edgeSignals = new Map(ir.signals.map((s) => [edgeId(s), s]));
   return {
     diagnostics: allDiags,
-    model: { ir, scene, source, schedule, meta: sceneMeta(ir, schedule), edgeSignals },
+    model: { ir, scene, source, schedule, meta: sceneMeta(ir, schedule), edgeSignals, stuck },
     schedule,
     stale: false,
     errorCount,

@@ -5,7 +5,7 @@ import { computeScheduleAndBuffers } from '../src/core/schedule';
 import { simMarks } from '../src/app/useSimulation';
 import type { SceneModel } from '../src/app/useScene';
 import { edgeId } from '../src/scene/labels';
-import { simulate, simulateUntilStuck, type SimStep } from '../src/sim/simulate';
+import { simulate, simulateUntilStuck, stuckBufferSizes, type SimStep } from '../src/sim/simulate';
 import { loadFixtures } from './helpers/fixtures';
 
 const span: Span = { from: 0, to: 0 };
@@ -119,9 +119,11 @@ describe('simulateUntilStuck', () => {
     );
     expect(computeScheduleAndBuffers(ir).ok).toBe(false);
     const r = simulateUntilStuck(ir, 100);
+    // x still delivers what a would read, and it waits there
+    expect(r.steps.map((s) => `${s.kind}:${s.actor}`)).toEqual(['input:x']);
+    expect(r.steps[0]!.after.s_x).toBe(1);
     expect(r).toMatchObject({
       kind: 'deadlock',
-      steps: [],
       waiting: [
         { actor: 'a', inputs: [{ signal: 's_ba', needed: 2, available: 0 }] },
         { actor: 'b', inputs: [{ signal: 's_ab', needed: 1, available: 0 }] },
@@ -149,12 +151,37 @@ describe('simulateUntilStuck', () => {
       'actor:a',
       'actor:b',
       'output:y',
+      'input:x',
     ]);
     noNegatives(r.steps);
     expect(r.kind === 'deadlock' && r.waiting[0]).toEqual({
       actor: 'a',
       inputs: [{ signal: 's_da', needed: 2, available: 1 }],
     });
+  });
+
+  it('sizes the buffers of a deadlock by what its run held and what the waiting need', () => {
+    const ir = system(
+      [actor('a'), actor('b'), delay('d', [0, 0])],
+      [
+        sig('s_x', 'x', 1, 'a', 1),
+        sig('s_ab', 'a', 1, 'b', 1),
+        sig('s_bd', 'b', 1, 'd', 1),
+        sig('s_da', 'd', 1, 'a', 2),
+        sig('s_y', 'b', 1, 'y', 1),
+      ],
+    );
+    const r = simulateUntilStuck(ir, 100);
+    if (r.kind !== 'deadlock') throw new Error(r.kind);
+    // s_da starts with 2 and a needs 2; x waits with 1; s_ab and s_y held 1 each
+    expect(new Map(stuckBufferSizes(r))).toEqual(
+      new Map([
+        ['s_x', 1],
+        ['s_ab', 1],
+        ['s_da', 2],
+        ['s_y', 1],
+      ]),
+    );
   });
 
   it('reports a deadlock behind a source that keeps firing', () => {

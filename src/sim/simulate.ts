@@ -256,6 +256,22 @@ export function traceOf(run: StuckRun, periodic: boolean, cap = Infinity): SimTr
  * of rounds R/4, R/2, 3R/4 and R is strictly increasing: bounded queues settle
  * after a transient, while inconsistent rates grow a queue with every round.
  */
+/**
+ * Buffer sizes for a deadlocked model, which has no schedule to size them: the
+ * most each signal held during the run, and at least what a waiting actor
+ * needs, so the tokens it waits beside have a place on the diagram.
+ */
+export function stuckBufferSizes(
+  stuck: Extract<StuckReport, { kind: 'deadlock' }>,
+): [string, number][] {
+  const most = new Map<string, number>();
+  const at = (sig: string, n: number) => most.set(sig, Math.max(most.get(sig) ?? 0, n));
+  for (const counts of [stuck.initial, ...stuck.steps.map((s) => s.after)])
+    for (const [sig, n] of Object.entries(counts)) at(sig, n);
+  for (const w of stuck.waiting) for (const i of w.inputs) at(i.signal, i.needed);
+  return [...most].filter(([, n]) => n > 0);
+}
+
 export function simulateUntilStuck(ir: IRSystem, maxFirings: number): StuckReport {
   const net = buildNet(ir);
   const counts = { ...net.initial };
@@ -297,7 +313,19 @@ export function simulateUntilStuck(ir: IRSystem, maxFirings: number): StuckRepor
       }
     }
     // no actor fired, so each one is short somewhere (null: there are no actors)
-    if (!fired) return deadlock(net.actors) ?? { kind: 'running', ...run };
+    if (!fired) {
+      const stuck = deadlock(net.actors);
+      // the inputs still deliver what a waiting actor reads, so the run shows
+      // their tokens arriving and waiting beside the buffer that stays empty
+      if (stuck)
+        for (const a of net.actors)
+          for (const p of net.ins.get(a)!) {
+            const io = p.fromInput && net.inputs.find((i) => i.land === p.signal);
+            if (io && counts[p.signal]! < p.rate)
+              steps.push(produce(counts, io, p.rate - counts[p.signal]!));
+          }
+      return stuck ?? { kind: 'running', ...run };
+    }
     steps.push(...drainAll(net, counts, net.initial));
     if (steps.length < maxFirings) rounds.push({ ...counts });
   }

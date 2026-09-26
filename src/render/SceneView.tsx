@@ -208,6 +208,7 @@ function withGhosts(prev: SceneModel, next: SceneModel): SceneModel {
       labels: [...b.labels, ...labels],
     },
     meta: {
+      stuckBuffers: next.meta.stuckBuffers,
       nodes: new Map([...prev.meta.nodes, ...next.meta.nodes]),
       edges: new Map([...prev.meta.edges, ...next.meta.edges]),
     },
