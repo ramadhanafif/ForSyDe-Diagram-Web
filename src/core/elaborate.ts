@@ -73,6 +73,7 @@ export function elaborate(mod: HsModule): {
       tokens: spec.body.form === 'delay' ? spec.body.tokensSpan : undefined,
       systemBindings: [],
       bindingProcs: [],
+      inline: spec.inline,
     });
   }
 
@@ -164,6 +165,20 @@ export function elaborate(mod: HsModule): {
   // pass 2: wire signals
   const signals: IRSignal[] = [];
   const consumed = new Map<string, Span>();
+  // SDF gives each destination its own arc, so a second consumer needs a split actor
+  const split = (arg: Ident): boolean => {
+    if (!consumed.has(arg.name)) {
+      consumed.set(arg.name, arg.span);
+      return false;
+    }
+    diags.push({
+      severity: 'error',
+      code: 'implicit-split',
+      message: `Signal '${arg.name}' is consumed twice; this editor needs an explicit split actor: SDF models each destination as its own arc`,
+      span: arg.span,
+    });
+    return true;
+  };
   const resolveSource = (arg: Ident): { name: string; rate: number } | null => {
     if (inputSet.has(arg.name)) return { name: arg.name, rate: 1 };
     const prod = producers.get(arg.name);
@@ -188,17 +203,7 @@ export function elaborate(mod: HsModule): {
     const p = procByName.get(b.proc.name);
     if (!p) continue; // broken spec, reported by the parser
     b.args.forEach((arg, idx) => {
-      const prev = consumed.get(arg.name);
-      if (prev) {
-        diags.push({
-          severity: 'error',
-          code: 'implicit-split',
-          message: `Signal '${arg.name}' is consumed twice; signals cannot be split implicitly: duplicate it with an explicit split actor`,
-          span: arg.span,
-        });
-        return;
-      }
-      consumed.set(arg.name, arg.span);
+      if (split(arg)) return;
       const source = resolveSource(arg);
       if (!source) return;
       signals.push({
@@ -211,6 +216,7 @@ export function elaborate(mod: HsModule): {
   }
 
   for (const out of sys.outputs) {
+    if (split(out)) continue;
     const source = resolveSource(out);
     if (!source) continue;
     signals.push({

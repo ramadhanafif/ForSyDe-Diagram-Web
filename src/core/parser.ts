@@ -4,6 +4,7 @@ import type {
   HsModule,
   Ident,
   ProcBody,
+  ProcSpec,
   RateLit,
   Span,
   SystemDecl,
@@ -129,19 +130,32 @@ function parseIdentOrTuple(c: Cursor): Ident[] | null {
   return null;
 }
 
+/** An int literal JavaScript cannot hold exactly; Number() would round it silently. */
+function tooBig(t: Token, diags: Diagnostic[]): boolean {
+  if (t.kind !== 'int' || Number.isSafeInteger(Number(t.text))) return false;
+  diags.push({
+    severity: 'error',
+    code: 'big-literal',
+    message: `${t.text} is too large: the largest number this editor handles is ${Number.MAX_SAFE_INTEGER}`,
+    span: t.span,
+  });
+  return true;
+}
+
 /** Parse a rate argument: bare int or tuple of ints. Floats are consumed so
  * the bad-rate check below can reject them with a clear message. */
-function parseRates(c: Cursor): RateLit[] | null {
+function parseRates(c: Cursor, diags: Diagnostic[]): RateLit[] | null {
   const t = c.peek();
   if (t?.kind === 'int' || t?.kind === 'float') {
     c.next();
-    return [{ value: Number(t.text), span: t.span }];
+    return tooBig(t, diags) ? null : [{ value: Number(t.text), span: t.span }];
   }
   if (c.atPunct('(')) {
     c.next();
     const rates: RateLit[] = [];
     while (c.peek()?.kind === 'int' || c.peek()?.kind === 'float') {
       const tok = c.next()!;
+      if (tooBig(tok, diags)) return null;
       rates.push({ value: Number(tok.text), span: tok.span });
       if (!c.expectPunct(',')) break;
     }
@@ -161,16 +175,18 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
     const flat: string[] = [];
     for (let i = c.pos; c.tokens[i]?.kind === 'int'; i++) flat.push(c.tokens[i]!.text);
     const inBare = c.peek()?.kind === 'int';
-    const inRates = parseRates(c);
+    const before = diags.length;
+    const inRates = parseRates(c, diags);
     const outBare = c.peek()?.kind === 'int';
-    const outRates = parseRates(c);
+    const outRates = parseRates(c, diags);
+    if (diags.length > before) return null;
     const fnTok = c.atIdent() ? c.next()! : null;
     for (const r of [...(inRates ?? []), ...(outRates ?? [])]) {
       if (!Number.isInteger(r.value) || r.value < 1) {
         diags.push({
           severity: 'error',
           code: 'bad-rate',
-          message: `Rates must be positive integers, got ${r.value}`,
+          message: `Rates must be whole numbers of at least 1, got ${r.value}`,
           span: r.span,
         });
         return null;
@@ -232,7 +248,9 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
     const tokens: number[] = [];
     if (open) {
       while (c.peek()?.kind === 'int' || c.peek()?.kind === 'float') {
-        tokens.push(Number(c.next()!.text));
+        const tok = c.next()!;
+        if (tooBig(tok, diags)) return null;
+        tokens.push(Number(tok.text));
         if (!c.expectPunct(',')) break;
       }
     }
@@ -267,6 +285,7 @@ function parseSystem(
   tokens: Token[],
   diags: Diagnostic[],
   stranded: Set<string>,
+  inlineSpecs: ProcSpec[],
 ): SystemDecl | null {
   const c = new Cursor(tokens);
   c.next(); // 'system'
@@ -327,7 +346,13 @@ function parseSystem(
 
     for (const g of groups) {
       const btokens = tokenize(source, g.from, g.to);
-      const binding = parseBinding(btokens, { from: g.from, to: g.to }, diags, stranded);
+      const binding = parseBinding(
+        btokens,
+        { from: g.from, to: g.to },
+        diags,
+        stranded,
+        inlineSpecs,
+      );
       if (binding) bindings.push(binding);
     }
   }
@@ -345,12 +370,14 @@ function parseSystem(
 }
 
 /** Parse one where-binding. When it fails after the lhs parsed, the lhs
- * signals go into `stranded` so elaboration does not also call them unknown. */
+ * signals go into `stranded` so elaboration does not also call them unknown.
+ * An inline `x = delaySDF [..] y` becomes a named delay in `inlineSpecs`. */
 function parseBinding(
   tokens: Token[],
   span: Span,
   diags: Diagnostic[],
   stranded: Set<string>,
+  inlineSpecs: ProcSpec[],
 ): WhereBinding | null {
   const c = new Cursor(tokens);
   if (tokens.some((t) => t.kind === 'ident' && t.text === 'where')) {
@@ -384,7 +411,17 @@ function parseBinding(
     });
     return null;
   }
-  if (isConstructor(procTok.text)) {
+  let proc = ident(procTok);
+  if (procTok.text === 'delaySDF') {
+    c.pos--;
+    const body = parseProcBody(c, diags, span);
+    if (!body) {
+      strand();
+      return null;
+    }
+    proc = { name: `delay_${lhs[0]!.name}`, span: procTok.span };
+    inlineSpecs.push({ name: proc, body, etaParams: 0, span, inline: true });
+  } else if (isConstructor(procTok.text)) {
     strand();
     diags.push({
       severity: 'error',
@@ -406,7 +443,7 @@ function parseBinding(
     });
     return null;
   }
-  return { lhs, proc: ident(procTok), args, span };
+  return { lhs, proc, args, span };
 }
 
 export function parse(source: string): { module: HsModule; diagnostics: Diagnostic[] } {
@@ -440,7 +477,7 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
     if (eqIdx === -1) continue;
 
     if (head.text === 'system') {
-      mod.system = parseSystem(source, decl, tokens, diags, mod.strandedSignals);
+      mod.system = parseSystem(source, decl, tokens, diags, mod.strandedSignals, mod.procSpecs);
       systemTokens = tokens;
       continue;
     }
@@ -486,7 +523,7 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
   const procNames = new Set([...mod.procSpecs.map((p) => p.name.name), ...mod.brokenSpecs]);
   const unindented: Span[] = [];
   for (const d of afterSystem) {
-    const binding = parseBinding(d.tokens, d.span, [], new Set());
+    const binding = parseBinding(d.tokens, d.span, [], new Set(), []);
     if (!binding || !procNames.has(binding.proc.name)) continue;
     unindented.push(d.span);
     binding.lhs.forEach((l) => mod.strandedSignals.add(l.name));

@@ -99,6 +99,8 @@ export interface ProcSpec {
   /** Number of explicit signal parameters (eta-expanded form); 0 if point-free. */
   etaParams: number;
   span: Span;
+  /** A delaySDF written inline in a system binding; `span` is that binding. */
+  inline?: boolean;
 }
 
 export interface HsModule {

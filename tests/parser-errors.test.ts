@@ -37,9 +37,28 @@ describe('parser and elaborator diagnostics', () => {
     expect(crlf.slice(span.from, span.to)).toContain('a_a = actor11SDF');
   });
 
-  it('rejects inline constructors in the system block', () => {
-    const src = MODEL.replace('s_1 = a_a s_in', 's_1 = delaySDF [0] s_in');
+  it('rejects inline actor constructors in the system block', () => {
+    const src = MODEL.replace('s_1 = a_a s_in', 's_1 = actor11SDF 1 1 f s_in');
     expect(errorsOf(src)).toContain('inline-constructor');
+  });
+
+  it('rejects a signal that feeds an actor and is also a system output', () => {
+    const src = MODEL.replace('system s_in = s_out', 'system s_in = (s_1, s_out)');
+    expect(errorsOf(src)).toEqual(['implicit-split']);
+  });
+
+  it('rejects integer literals above 2^53 on the literal', () => {
+    const big = '99999999999999999999';
+    for (const src of [
+      MODEL.replace('a_a = actor11SDF 1 1 f', `a_a = actor11SDF ${big} 1 f`),
+      MODEL.replace('a_a = actor11SDF 1 1 f', `a_a = actor21SDF (1, ${big}) 1 f`),
+      MODEL.replace('a_b = actor11SDF 1 1 f', `a_b = delaySDF [${big}]`),
+    ]) {
+      const { diagnostics } = parse(src);
+      expect(diagnostics.map((d) => d.code)).toEqual(['big-literal']);
+      expect(src.slice(diagnostics[0]!.span.from, diagnostics[0]!.span.to)).toBe(big);
+    }
+    expect(errorsOf(MODEL.replace('actor11SDF 1 1 f\na_b', 'actor11SDF 9007199254740991 1 f\na_b'))).toEqual([]);
   });
 
   it('rejects implicit signal splits', () => {
@@ -152,7 +171,7 @@ describe('root-cause diagnostics', () => {
 
   it('reports a zero rate alone', () => {
     expect(diagsOf(spec('a_a = actor11SDF 0 1 f')).map((d) => d.message)).toEqual([
-      'Rates must be positive integers, got 0',
+      'Rates must be whole numbers of at least 1, got 0',
     ]);
   });
 

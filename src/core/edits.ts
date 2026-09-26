@@ -138,7 +138,8 @@ export function outputRenames(ir: IRSystem, splices: Splice[]): [string, string]
 
 /**
  * Add a new actor fed by a fresh system input; its output becomes a new
- * system output so the model stays fully connected.
+ * system output. The actor is a connected part of its own, which the
+ * scheduler schedules beside the rest.
  */
 export function addSourceActor(source: string, ir: IRSystem): EditResult {
   const a = ir.spans.anchors;
@@ -203,7 +204,8 @@ export function renameProcess(
   newName: string,
 ): Splice[] | null {
   const spans = ir.spans.processes.get(oldName);
-  if (!spans || !isValidFreshIdent(source, newName)) return null;
+  // an inline delay's name is made up; its span is the delaySDF call
+  if (!spans || spans.inline || !isValidFreshIdent(source, newName)) return null;
   return [spans.name, ...spans.bindingProcs].map((s) => replaceSpan(s, newName));
 }
 
@@ -251,6 +253,8 @@ export function addInputError(ir: IRSystem, procName: string, signalName: string
   );
   if (consumer)
     return `'${signalName}' already feeds '${consumer.target.name}'; an SDF signal has exactly one consumer, duplicate it with a split actor instead`;
+  if (ir.outputs.includes(signalName))
+    return `'${signalName}' is a system output; this editor needs an explicit split actor to feed it to '${procName}' too: SDF models each destination as its own arc`;
   const producer = ir.signals.find((s) => s.name === signalName)?.source.name;
   if (producer === procName) return `'${procName}' cannot consume its own output directly`;
   return null;
@@ -292,7 +296,8 @@ export function deleteProcess(ir: IRSystem, name: string): Splice[] | null {
   const p = ir.processes.find((q) => q.name === name);
   if (!spans || !p) return null;
 
-  const splices: Splice[] = [deleteLines(spans.specBinding)];
+  // an inline delay's spec is its binding, deleted below
+  const splices: Splice[] = spans.inline ? [] : [deleteLines(spans.specBinding)];
   if (spans.systemBindings.length === 0) return splices;
 
   const oneInOneOut = isDelay(p) || (p.inRates.length === 1 && p.outRates.length === 1);
