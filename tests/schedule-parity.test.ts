@@ -22,7 +22,8 @@ function replay(edges: Edge[], order: string[]): number[] | null {
   const tokens = edges.map((e) => e.initTokens);
   const max = [...tokens];
   for (const a of order) {
-    for (const [i, e] of edges.entries()) if (e.dst === a && (tokens[i]! -= e.cons) < 0) return null;
+    for (const [i, e] of edges.entries())
+      if (e.dst === a && (tokens[i]! -= e.cons) < 0) return null;
     for (const [i, e] of edges.entries()) if (e.src === a) tokens[i]! += e.prod;
     tokens.forEach((t, i) => (max[i] = Math.max(max[i]!, t)));
   }

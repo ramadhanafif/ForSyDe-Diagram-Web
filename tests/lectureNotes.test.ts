@@ -128,7 +128,13 @@ a_c = actor11SDF 1 1 f
     if (!r.ok) throw new Error(r.message);
     const a = analyze(ir, r.rank)!;
     expect(a.parts).toBe(2);
-    expect(a.q).toEqual(new Map([['a_up', 3], ['a_down', 2], ['a_c', 1]]));
+    expect(a.q).toEqual(
+      new Map([
+        ['a_up', 3],
+        ['a_down', 2],
+        ['a_c', 1],
+      ]),
+    );
     expect(a.q).toEqual(r.repetitions);
     expect(analyze(ir)!.rank).toBe(r.rank);
     expect(r.schedule).toHaveLength(6);

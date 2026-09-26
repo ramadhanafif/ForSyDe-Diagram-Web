@@ -101,9 +101,7 @@ export function rowReduce(rows: Rat[][]): { rref: Rat[][]; pivots: number[] } {
     const eliminate = (row: Rat[]): Rat[] => {
       const factor = row[col]!;
       if (isZero(factor)) return row;
-      return row.map((v, i) =>
-        isZero(normalized[i]!) ? v : sub(v, mul(factor, normalized[i]!)),
-      );
+      return row.map((v, i) => (isZero(normalized[i]!) ? v : sub(v, mul(factor, normalized[i]!))));
     };
     work = [
       ...work.slice(0, done).map(eliminate),
@@ -157,7 +155,7 @@ export function buildChannels(
   for (const s of ir.signals) {
     if (!ir.inputs.includes(s.source.name)) continue;
     let t = s.target.name;
-    for (const seen = new Set<string>(); delays.has(t) && !seen.has(t); ) {
+    for (const seen = new Set<string>(); delays.has(t) && !seen.has(t);) {
       seen.add(t);
       t = ir.signals.find((x) => x.source.name === t)?.target.name ?? t;
     }
@@ -200,7 +198,7 @@ export function buildChannels(
     let last: IRSignal | undefined;
     let tokens = 0;
     const aliases: [string, string][] = [];
-    for (let d: IRDelay | undefined = head; d && !walked.has(d.name); ) {
+    for (let d: IRDelay | undefined = head; d && !walked.has(d.name);) {
       walked.add(d.name);
       const incoming = ir.signals.filter((s) => s.target.name === d!.name);
       const outgoing = ir.signals.filter((s) => s.source.name === d!.name);
@@ -226,8 +224,7 @@ export function buildChannels(
       d = delays.get(last.target.name);
     }
     // delays adjacent to global I/O are ignored (Haskell behavior)
-    if (ir.inputs.includes(first!.source.name) || ir.outputs.includes(last!.target.name))
-      continue;
+    if (ir.inputs.includes(first!.source.name) || ir.outputs.includes(last!.target.name)) continue;
     if (!actorSet.has(first!.source.name) || !actorSet.has(last!.target.name)) {
       return {
         error: err('delay-wiring', `Delay '${head.name}' must connect two actors directly`),
@@ -244,8 +241,7 @@ export function buildChannels(
     });
   }
   const stray = [...delays.keys()].find((d) => !walked.has(d));
-  if (stray)
-    return { error: err('delay-wiring', `Delay '${stray}' is on a loop of delays only`) };
+  if (stray) return { error: err('delay-wiring', `Delay '${stray}' is on a loop of delays only`) };
 
   return { actors, edges };
 }

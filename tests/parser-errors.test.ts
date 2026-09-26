@@ -58,7 +58,9 @@ describe('parser and elaborator diagnostics', () => {
       expect(diagnostics.map((d) => d.code)).toEqual(['big-literal']);
       expect(src.slice(diagnostics[0]!.span.from, diagnostics[0]!.span.to)).toBe(big);
     }
-    expect(errorsOf(MODEL.replace('actor11SDF 1 1 f\na_b', 'actor11SDF 9007199254740991 1 f\na_b'))).toEqual([]);
+    expect(
+      errorsOf(MODEL.replace('actor11SDF 1 1 f\na_b', 'actor11SDF 9007199254740991 1 f\na_b')),
+    ).toEqual([]);
   });
 
   it('rejects implicit signal splits', () => {
