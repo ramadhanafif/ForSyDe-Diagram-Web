@@ -1,7 +1,7 @@
 {
   "name": "forsyde-playground",
   "version": "1.4.0",
-  "description": "Live SDF dataflow diagrams for ForSyDe Shallow models, in the browser",
+  "description": "Browser editor for ForSyDe Shallow SDF models: live diagrams, schedule, analysis and token animation",
   "scripts": {
     "test": "vitest run",
     "e2e": "playwright test",
@@ -12,8 +12,19 @@
     "lint": "eslint src tests",
     "format": "prettier --write ."
   },
-  "keywords": [],
-  "author": "",
+  "homepage": "https://ramadhanafif.github.io/ForSyDe-Diagram-Web/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramadhanafif/ForSyDe-Diagram-Web.git"
+  },
+  "bugs": "https://github.com/ramadhanafif/ForSyDe-Diagram-Web/issues",
+  "keywords": [
+    "forsyde",
+    "sdf",
+    "dataflow",
+    "haskell"
+  ],
+  "author": "Muhammad Afif Ramadhan",
   "license": "MIT",
   "type": "module",
   "devDependencies": {
