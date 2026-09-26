@@ -23,7 +23,7 @@ const sig = (source: string, target: string) => ({
 });
 
 describe('placeNodes', () => {
-  it('keeps stored positions over hints and elk', () => {
+  it('keeps stored positions over hints and the automatic layout', () => {
     const out = placeNodes(
       [box('a', 5, 5)],
       new Map([['a', { x: 100, y: 200 }]]),
@@ -80,7 +80,7 @@ describe('placeNodes', () => {
     expect(out.get('b')).toEqual({ x: 60 + LAYER_SPACING, y: 60 + NODE_SPACING });
   });
 
-  it('places producers first even when elk lists the consumer first', () => {
+  it('places producers first even when the layout lists the consumer first', () => {
     const out = placeNodes(
       [box('c'), box('b'), box('a')],
       new Map([['a', { x: 0, y: 0 }]]),
@@ -105,7 +105,7 @@ describe('placeNodes', () => {
   });
 
   it('places a source before its consumer when nothing has a placed producer', () => {
-    // toolbar Add actor: elk lists the actor first, its input pill is the source
+    // a click on the actor chip: the actor listed first, its input pill is the source
     const out = placeNodes(
       [box('p'), box('a_1'), box('s_in'), box('s_out')],
       new Map([['p', { x: 0, y: 0 }]]),

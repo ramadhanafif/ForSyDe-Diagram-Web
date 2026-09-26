@@ -19,7 +19,7 @@ const ON_OUTLINE = 1;
 const SAME = 0.01;
 const EPS = 1e-6;
 /**
- * How far a label may sit from what it annotates. Elk's worst is 31 px (a
+ * How far a label may sit from what it annotates. Elk's worst was 31 px (a
  * buffer pushed right by a long signal name); the bound stops a layout from
  * parking labels in free space far away.
  */
