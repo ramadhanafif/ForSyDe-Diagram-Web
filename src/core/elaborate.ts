@@ -90,11 +90,19 @@ export function elaborate(mod: HsModule): {
   sys.params.forEach(noteOccurrence);
   sys.outputs.forEach(noteOccurrence);
 
+  // signals whose producer the parser already reported; unknown-signal would only repeat it
+  const stranded = new Set(mod.strandedSignals);
+  let dropped = false;
   const usedProcs = new Set<string>();
   for (const b of sys.bindings) {
     b.lhs.forEach(noteOccurrence);
     b.args.forEach(noteOccurrence);
     const p = procByName.get(b.proc.name);
+    if (!p && mod.brokenSpecs.has(b.proc.name)) {
+      b.lhs.forEach((l) => stranded.add(l.name));
+      dropped = true;
+      continue;
+    }
     if (!p) {
       diags.push({
         severity: 'error',
@@ -159,6 +167,10 @@ export function elaborate(mod: HsModule): {
   const resolveSource = (arg: Ident): { name: string; rate: number } | null => {
     if (inputSet.has(arg.name)) return { name: arg.name, rate: 1 };
     const prod = producers.get(arg.name);
+    if (!prod && stranded.has(arg.name)) {
+      dropped = true;
+      return null;
+    }
     if (!prod) {
       diags.push({
         severity: 'error',
@@ -173,7 +185,8 @@ export function elaborate(mod: HsModule): {
   };
 
   for (const b of sys.bindings) {
-    const p = procByName.get(b.proc.name)!;
+    const p = procByName.get(b.proc.name);
+    if (!p) continue; // broken spec, reported by the parser
     b.args.forEach((arg, idx) => {
       const prev = consumed.get(arg.name);
       if (prev) {
@@ -208,7 +221,7 @@ export function elaborate(mod: HsModule): {
     });
   }
 
-  if (diags.some((d) => d.severity === 'error')) {
+  if (dropped || diags.some((d) => d.severity === 'error')) {
     return { ir: null, diagnostics: diags };
   }
 

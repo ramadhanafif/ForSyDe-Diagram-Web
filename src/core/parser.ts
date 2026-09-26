@@ -13,6 +13,43 @@ import { tokenize, type Token } from './lexer';
 
 const ACTOR_RE = /^actor([1-4])([1-4])SDF$/;
 
+const CONSTRUCTORS = ['delaySDF'];
+for (let n = 1; n <= 4; n++) for (let m = 1; m <= 4; m++) CONSTRUCTORS.push(`actor${n}${m}SDF`);
+
+function isConstructor(name: string): boolean {
+  return ACTOR_RE.test(name) || name === 'delaySDF';
+}
+
+function levenshtein(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j]! + 1,
+        cur[j - 1]! + 1,
+        prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length]!;
+}
+
+/** The constructor a misspelt head most likely meant (case-insensitive, edit distance <= 2). */
+function nearConstructor(name: string): string | null {
+  let best: string | null = null;
+  let bestDist = 3;
+  for (const ctor of CONSTRUCTORS) {
+    const d = levenshtein(name.toLowerCase(), ctor.toLowerCase());
+    if (d < bestDist) {
+      best = ctor;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
 interface Decl {
   offset: number;
   end: number;
@@ -120,7 +157,12 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
   if (actorMatch) {
     const nIn = parseInt(actorMatch[1]!, 10);
     const nOut = parseInt(actorMatch[2]!, 10);
+    // flat numeric run after the head, used to build the tuple example below
+    const flat: string[] = [];
+    for (let i = c.pos; c.tokens[i]?.kind === 'int'; i++) flat.push(c.tokens[i]!.text);
+    const inBare = c.peek()?.kind === 'int';
     const inRates = parseRates(c);
+    const outBare = c.peek()?.kind === 'int';
     const outRates = parseRates(c);
     const fnTok = c.atIdent() ? c.next()! : null;
     for (const r of [...(inRates ?? []), ...(outRates ?? [])]) {
@@ -133,6 +175,36 @@ function parseProcBody(c: Cursor, diags: Diagnostic[], declSpan: Span): ProcBody
         });
         return null;
       }
+    }
+    const bareIdx = nIn > 1 && inBare ? 0 : nOut > 1 && outBare && inRates ? inRates.length : -1;
+    if (bareIdx !== -1) {
+      const nums = [...flat, ...Array<string>(nIn + nOut).fill('1')].slice(0, nIn + nOut);
+      const group = (xs: string[]) => (xs.length > 1 ? `(${xs.join(', ')})` : xs[0]!);
+      let fnName = 'f';
+      for (let i = c.pos; c.tokens[i]; i++) {
+        if (c.tokens[i]!.kind === 'ident') {
+          fnName = c.tokens[i]!.text;
+          break;
+        }
+      }
+      const example = `${head.text} ${group(nums.slice(0, nIn))} ${group(nums.slice(nIn))} ${fnName}`;
+      const which = bareIdx === 0 ? `${nIn} input` : `${nOut} output`;
+      diags.push({
+        severity: 'error',
+        code: 'rate-arity',
+        message: `${head.text} takes its ${which} rates as a tuple: ${example}`,
+        span: bareIdx === 0 ? inRates![0]!.span : outRates![0]!.span,
+      });
+      return null;
+    }
+    if (inRates && outRates && !fnTok && (c.atPunct('(') || c.peek()?.text === '\\')) {
+      diags.push({
+        severity: 'error',
+        code: 'bad-actor-call',
+        message: 'Name the function at top level and pass its name: f_1 [x] = [x]',
+        span: c.peek()!.span,
+      });
+      return null;
     }
     if (!inRates || !outRates || !fnTok) {
       diags.push({
@@ -194,6 +266,7 @@ function parseSystem(
   decl: Decl,
   tokens: Token[],
   diags: Diagnostic[],
+  stranded: Set<string>,
 ): SystemDecl | null {
   const c = new Cursor(tokens);
   c.next(); // 'system'
@@ -254,7 +327,7 @@ function parseSystem(
 
     for (const g of groups) {
       const btokens = tokenize(source, g.from, g.to);
-      const binding = parseBinding(btokens, { from: g.from, to: g.to }, diags);
+      const binding = parseBinding(btokens, { from: g.from, to: g.to }, diags, stranded);
       if (binding) bindings.push(binding);
     }
   }
@@ -271,7 +344,14 @@ function parseSystem(
   };
 }
 
-function parseBinding(tokens: Token[], span: Span, diags: Diagnostic[]): WhereBinding | null {
+/** Parse one where-binding. When it fails after the lhs parsed, the lhs
+ * signals go into `stranded` so elaboration does not also call them unknown. */
+function parseBinding(
+  tokens: Token[],
+  span: Span,
+  diags: Diagnostic[],
+  stranded: Set<string>,
+): WhereBinding | null {
   const c = new Cursor(tokens);
   if (tokens.some((t) => t.kind === 'ident' && t.text === 'where')) {
     diags.push({
@@ -292,8 +372,10 @@ function parseBinding(tokens: Token[], span: Span, diags: Diagnostic[]): WhereBi
     });
     return null;
   }
+  const strand = () => lhs.forEach((l) => stranded.add(l.name));
   const procTok = c.atIdent() ? c.next()! : null;
   if (!procTok) {
+    strand();
     diags.push({
       severity: 'error',
       code: 'bad-binding',
@@ -302,7 +384,8 @@ function parseBinding(tokens: Token[], span: Span, diags: Diagnostic[]): WhereBi
     });
     return null;
   }
-  if (ACTOR_RE.test(procTok.text) || procTok.text === 'delaySDF') {
+  if (isConstructor(procTok.text)) {
+    strand();
     diags.push({
       severity: 'error',
       code: 'inline-constructor',
@@ -314,6 +397,7 @@ function parseBinding(tokens: Token[], span: Span, diags: Diagnostic[]): WhereBi
   const args: Ident[] = [];
   while (c.atIdent()) args.push(ident(c.next()!));
   if (c.peek()) {
+    strand();
     diags.push({
       severity: 'error',
       code: 'unsupported-binding',
@@ -332,7 +416,12 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
     system: null,
     procSpecs: [],
     procSpecsEnd: source.length,
+    brokenSpecs: new Set(),
+    strandedSignals: new Set(),
   };
+  let systemTokens: Token[] = [];
+  // top-level `lhs = name args` decls after the system; checked for lost indentation below
+  const afterSystem: { tokens: Token[]; span: Span }[] = [];
 
   for (const decl of splitDecls(source)) {
     const tokens = tokenize(source, decl.offset, decl.end);
@@ -351,16 +440,29 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
     if (eqIdx === -1) continue;
 
     if (head.text === 'system') {
-      mod.system = parseSystem(source, decl, tokens, diags);
+      mod.system = parseSystem(source, decl, tokens, diags, mod.strandedSignals);
+      systemTokens = tokens;
       continue;
     }
 
     // top-level binding: proc spec if RHS head is an actor/delay constructor
-    const rhsHead = tokens
-      .slice(eqIdx + 1)
-      .find((t) => t.kind === 'ident' && (ACTOR_RE.test(t.text) || t.text === 'delaySDF'));
     const rhsFirst = tokens[eqIdx + 1];
-    if (rhsHead && rhsFirst && rhsHead.span.from === rhsFirst.span.from) {
+    if (rhsFirst?.kind === 'ident' && !isConstructor(rhsFirst.text)) {
+      const near = nearConstructor(rhsFirst.text);
+      if (near) {
+        diags.push({
+          severity: 'error',
+          code: 'unknown-constructor',
+          message: `Unknown constructor '${rhsFirst.text}': did you mean ${near}?`,
+          span: rhsFirst.span,
+        });
+        mod.brokenSpecs.add(head.text);
+      } else if (mod.system) {
+        afterSystem.push({ tokens, span: { from: decl.offset, to: decl.end } });
+      }
+      continue;
+    }
+    if (rhsFirst?.kind === 'ident') {
       const c = new Cursor(tokens, eqIdx + 1);
       const etaParams = tokens.slice(1, eqIdx).filter((t) => t.kind === 'ident').length;
       const body = parseProcBody(c, diags, { from: decl.offset, to: decl.end });
@@ -372,8 +474,52 @@ export function parse(source: string): { module: HsModule; diagnostics: Diagnost
           span: { from: decl.offset, to: decl.end },
         });
         mod.procSpecsEnd = decl.end;
+      } else {
+        mod.brokenSpecs.add(head.text);
       }
       continue;
+    }
+  }
+
+  // A top-level decl applying a known process to signals is a where-binding
+  // that lost its indentation. ponytail: only spec names count as processes.
+  const procNames = new Set([...mod.procSpecs.map((p) => p.name.name), ...mod.brokenSpecs]);
+  const unindented: Span[] = [];
+  for (const d of afterSystem) {
+    const binding = parseBinding(d.tokens, d.span, [], new Set());
+    if (!binding || !procNames.has(binding.proc.name)) continue;
+    unindented.push(d.span);
+    binding.lhs.forEach((l) => mod.strandedSignals.add(l.name));
+  }
+
+  const sys = mod.system;
+  const hasWhere = systemTokens.some((t) => t.kind === 'ident' && t.text === 'where');
+  // a second '=' in the system decl means binding lines follow the output
+  const inlineBindings =
+    systemTokens.filter((t) => t.kind === 'punct' && t.text === '=').length > 1;
+  if (
+    sys &&
+    !hasWhere &&
+    (unindented.length > 0 || inlineBindings) &&
+    sys.outputs.some((o) => !sys.params.some((p) => p.name === o.name))
+  ) {
+    sys.outputs.forEach((o) => mod.strandedSignals.add(o.name));
+    diags.push({
+      severity: 'error',
+      code: 'no-where',
+      message:
+        "The system's bindings need a 'where' block: system s_in = s_out, then 'where' and the bindings indented below",
+      span: systemTokens[0]!.span,
+    });
+  } else {
+    // with no 'where' at all, the no-where error above already covers these lines
+    for (const span of unindented) {
+      diags.push({
+        severity: 'error',
+        code: 'unindented-binding',
+        message: "This binding is not indented, so it is outside the system's 'where' block",
+        span,
+      });
     }
   }
 
