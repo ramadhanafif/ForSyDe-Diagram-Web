@@ -486,11 +486,19 @@ async function setFlags(page, want) {
 }
 
 async function setStyle(page, style) {
-  const label = style === 'lecture' ? 'Lecture style' : 'Modern style';
-  const at = await page.eval((t) => window.__e2e.button('.toolbar', t), label);
-  if (!at) return; // already in that style
-  await page.click(at.x, at.y);
-  await until(() => page.eval((t) => !window.__e2e.button('.toolbar', t), label), `${style} style`);
+  const label = style === 'lecture' ? 'Lecture' : 'Modern';
+  const checked = (t) =>
+    page.eval(
+      (l) =>
+        window.__e2e
+          .qa('.toolbar-items > .seg [role=radio]')
+          .find((b) => b.textContent.trim() === l)
+          ?.getAttribute('aria-checked') === 'true',
+      t,
+    );
+  if (await checked(label)) return;
+  await clickButton(page, '.toolbar-items > .seg', label);
+  await until(() => checked(label), `${style} style`);
   await settle(page);
 }
 
@@ -1112,6 +1120,27 @@ async function presentMode(page, { url }) {
   expect(await exists(page, '.app.presenting'), 'Space after the Present button left present mode');
 }
 
+/** The toolbar is one row down to 1024 px; its menus close on Esc and give focus back. */
+async function toolbarRow(page, { url }) {
+  for (const [w, h] of [
+    [1280, 720],
+    [1024, 768],
+  ]) {
+    await page.viewport(w, h);
+    await open(page, url);
+    const bar = await page.box('.toolbar');
+    expect(bar.h <= 44, `the toolbar wraps at ${w} px: ${bar.h} px high`);
+  }
+  await clickSelectorCenter(page, '.export-menu summary');
+  await waitFor(page, '.export-menu [role=menuitem]', 'the Export menu');
+  const first = await page.eval(() => document.activeElement?.textContent);
+  expect(first === 'Haskell (.hs)', `focus on '${first}' when Export opened`);
+  await page.key('Escape');
+  expect(!(await exists(page, '.export-menu[open]')), 'Esc left the Export menu open');
+  const back = await page.eval(() => document.activeElement?.textContent);
+  expect(back === 'Export', `focus went to '${back}' after Esc`);
+}
+
 /** A phone: one pane at a time behind tabs, labels no smaller than 9 px, SHOW folded. */
 async function phoneLayout(page, { url }) {
   await page.viewport(390, 844);
@@ -1198,7 +1227,9 @@ async function hsRoundTrip(page, { url }) {
 async function newModel(page, { url }) {
   await open(page, url);
   await load(page, MODEL);
-  await sceneChange(page, () => clickButton(page, '.toolbar', 'New'), 'the blank model');
+  await clickSelectorCenter(page, '.file-menu summary');
+  await waitFor(page, '.file-menu [role=menuitem]', 'the File menu');
+  await sceneChange(page, () => clickButton(page, '.file-menu', 'New'), 'the blank model');
   const text = await doc(page);
   expect(/^module Model where/.test(text) && /a_1 = |a_1 s = /.test(text), 'not the blank model');
   const picked = await page.eval(() => document.querySelector('.toolbar select').value);
@@ -2098,8 +2129,8 @@ async function animate(page, { url }) {
   await waitFor(page, '.timeline', 'the timeline after Animate');
   await until(() => playing(page), 'Animate to start playback', 2000);
   expect(
-    /Stop/.test(await page.eval(() => document.querySelector('.animate-button').textContent)),
-    'the button does not offer Stop while playing',
+    /Pause/.test(await page.eval(() => document.querySelector('.animate-button').textContent)),
+    'the button does not offer Pause while playing',
   );
   // the period opens with the input producing: tokens leave the input pill
   const kinds = await page.eval(() => window.__fsd.trace().steps.map((s) => s.kind));
@@ -2111,10 +2142,12 @@ async function animate(page, { url }) {
   );
   const stop = await page.box('.animate-button');
   await page.click(stop.x, stop.y);
-  await until(async () => !(await playing(page)), 'Stop to pause playback', 2000);
+  await until(async () => !(await playing(page)), 'Pause to pause playback', 2000);
 
   // the tour's Animate step starts it too
   await clickAria(page, 'reset');
+  await clickSelectorCenter(page, '.more-menu summary');
+  await waitFor(page, '.tour-replay', 'the help menu');
   const tour = await page.box('.tour-replay');
   await page.click(tour.x, tour.y);
   // driver.js loads on demand
@@ -2409,6 +2442,7 @@ export const scenarios = {
   arrowKeys,
   presentMode,
   phoneLayout,
+  toolbarRow,
   learnSdf,
   reloadRestores,
   hsRoundTrip,

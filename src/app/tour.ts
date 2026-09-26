@@ -37,7 +37,8 @@ const stepsFor = (hooks: TourHooks) =>
           element: '.toolbar .palette',
           popover: {
             title: 'Palette',
-            description: 'Drag an actor or delay chip onto an edge to insert it into the model.',
+            description:
+              'Click the actor chip to add an actor, or drag a chip onto an edge to insert it there.',
           },
         },
     {

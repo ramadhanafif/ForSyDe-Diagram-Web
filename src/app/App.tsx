@@ -234,7 +234,7 @@ const WORKING_COPY_KEY = 'workingCopy';
 /** Horizontal distance from a new source actor's center to its io nodes' centers. */
 const IO_HINT_OFFSET = 110;
 
-const DEFAULT_EXAMPLE = examples.find((e) => e.name === 'SDF_example_002') ?? examples[0];
+const DEFAULT_EXAMPLE = examples.find((e) => e.group === 'Lessons') ?? examples[0];
 
 /** Stored working copy, else the default example, unedited. */
 const initialWorkingCopy = (): WorkingCopy => {
@@ -281,7 +281,8 @@ function sourceActorHints(created: string[], at: Point): [string, Point][] {
   ];
 }
 
-const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
+const initialAppTheme = (): 'light' | 'dark' =>
+  (storageGet('theme') ?? preferredTheme()) === 'dark' ? 'dark' : 'light';
 
 const initialDiagramTheme = (): 'modern' | 'lecture' =>
   storageGet('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
@@ -808,10 +809,6 @@ export function App() {
     editorRef.current.applySplices(fix.splices);
   };
 
-  const onAddDelay = () => {
-    setNotice({ text: 'a delay needs a signal: drag the delay chip onto an edge' });
-  };
-
   const onAddActor = () => {
     if (!model) return;
     if (editorRef.current?.getDoc() !== model.source) {
@@ -1004,12 +1001,11 @@ export function App() {
     <div className={`app tab-${tab}${presenting ? ' presenting' : ''}`}>
       <Toolbar
         example={example}
+        edited={!!source && source !== examples.find((e) => e.name === example)?.source}
         onExample={loadExample}
-        onFit={() => setFitRequest((n) => n + 1)}
         showSchedule={showSchedule}
         onToggleSchedule={onToggleSchedule}
         onAddActor={onAddActor}
-        onAddDelay={onAddDelay}
         onExport={(k) => void onExport(k)}
         onNew={onNew}
         onOpen={onOpen}
@@ -1019,9 +1015,12 @@ export function App() {
         animating={sim.playing}
         canAnimate={!!model}
         animateBlocked={nothingToRun}
+        animateWarning={schedError ? `Not schedulable: ${schedError}` : null}
+        stale={pipe.stale}
         onAnimate={onAnimate}
         diagramTheme={diagramTheme}
-        onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
+        onDiagramTheme={setDiagramTheme}
+        appTheme={appTheme}
         onToggleAppTheme={() => setAppTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
         presenting={presenting}
         onPresent={togglePresent}
