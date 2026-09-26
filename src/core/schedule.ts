@@ -8,12 +8,12 @@ import { isDelay } from './ir';
  * greedy scheduler fires the first fireable actor.
  */
 
-interface Actor {
+export interface Actor {
   name: string;
   isInput: boolean;
 }
 
-interface Edge {
+export interface Edge {
   edgeName: string;
   src: string;
   dst: string;
@@ -51,7 +51,7 @@ function err(kind: ScheduleErrorKind, message: string): ScheduleResult {
 // ---------------------------------------------------------------------------
 // Exact rationals over bigint (numerator n, denominator d > 0, normalized)
 
-interface Rat {
+export interface Rat {
   n: bigint;
   d: bigint;
 }
@@ -63,21 +63,21 @@ function gcd(a: bigint, b: bigint): bigint {
   return a;
 }
 
-function rat(n: bigint, d = 1n): Rat {
+export function rat(n: bigint, d = 1n): Rat {
   if (d < 0n) [n, d] = [-n, -d];
   const g = gcd(n, d) || 1n;
   return { n: n / g, d: d / g };
 }
 
-const sub = (a: Rat, b: Rat): Rat => rat(a.n * b.d - b.n * a.d, a.d * b.d);
-const mul = (a: Rat, b: Rat): Rat => rat(a.n * b.n, a.d * b.d);
-const div = (a: Rat, b: Rat): Rat => rat(a.n * b.d, a.d * b.n);
+export const sub = (a: Rat, b: Rat): Rat => rat(a.n * b.d - b.n * a.d, a.d * b.d);
+export const mul = (a: Rat, b: Rat): Rat => rat(a.n * b.n, a.d * b.d);
+export const div = (a: Rat, b: Rat): Rat => rat(a.n * b.d, a.d * b.n);
 const isZero = (a: Rat): boolean => a.n === 0n;
 
 // ---------------------------------------------------------------------------
 // Linear algebra: RREF, rank, nullspace, minimal integer vector
 
-function rowReduce(rows: Rat[][]): { rref: Rat[][]; pivots: number[] } {
+export function rowReduce(rows: Rat[][]): { rref: Rat[][]; pivots: number[] } {
   const nCols = rows[0]?.length ?? 0;
   let work = rows.map((r) => [...r]);
   const pivots: number[] = [];
@@ -130,7 +130,7 @@ function nullspaceBasis(mat: bigint[][]): Rat[][] {
   return basis;
 }
 
-function toMinimalIntegers(xs: Rat[]): bigint[] {
+export function toMinimalIntegers(xs: Rat[]): bigint[] {
   const commonDenom = xs.reduce((l, x) => (l * x.d) / (gcd(l, x.d) || 1n), 1n);
   const ints = xs.map((x) => x.n * (commonDenom / x.d));
   const g = ints.reduce((a, b) => gcd(a, b), 0n);
@@ -141,7 +141,8 @@ function toMinimalIntegers(xs: Rat[]): bigint[] {
 // ---------------------------------------------------------------------------
 // IRSystem -> actors + edges (delay folding), mirroring convertIRSystem
 
-function convertIRSystem(
+/** Actors and channels with delays folded into edges; self-loops are kept, unchecked. */
+export function buildChannels(
   ir: IRSystem,
 ): { actors: Actor[]; edges: Edge[] } | { error: ScheduleResult } {
   const delayNames = ir.processes.filter(isDelay).map((p) => p.name);
@@ -212,7 +213,15 @@ function convertIRSystem(
     });
   }
 
-  for (const e of edges) {
+  return { actors, edges };
+}
+
+function convertIRSystem(
+  ir: IRSystem,
+): { actors: Actor[]; edges: Edge[] } | { error: ScheduleResult } {
+  const conv = buildChannels(ir);
+  if ('error' in conv) return conv;
+  for (const e of conv.edges) {
     if (e.src === e.dst && e.prod !== e.cons) {
       return {
         error: err(
@@ -222,7 +231,7 @@ function convertIRSystem(
       };
     }
   }
-  return { actors, edges };
+  return conv;
 }
 
 // ---------------------------------------------------------------------------

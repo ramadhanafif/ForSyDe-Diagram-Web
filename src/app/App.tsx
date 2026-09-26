@@ -31,6 +31,7 @@ import {
 } from './storage';
 import { Toolbar, type ExportKind } from './Toolbar';
 import { Timeline } from './Timeline';
+import { analyze } from '../core/analysis';
 import { scheduleWarning } from './scheduleWarning';
 import { download, sceneToSvg, svgToPngBlob } from '../export/svg';
 import { sceneToTikz, tikzPicture } from '../export/tikz';
@@ -328,6 +329,7 @@ export function App() {
     [model, shownPositions],
   );
   const parts = useMemo(() => (model ? componentCount(model.ir) : 0), [model]);
+  const facts = useMemo(() => (model ? analyze(model.ir) : null), [model]);
   // why there is no schedule; the rank error on a disconnected graph teaches the wrong concept
   let schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
   if (
@@ -1061,9 +1063,11 @@ export function App() {
               {notice.undo && <button onClick={notice.undo}>Undo</button>}
             </div>
           )}
-          {showSchedule && trace && (
+          {showSchedule && (trace || facts) && (
             <Timeline
               sched={pipe.schedule?.ok ? pipe.schedule : null}
+              facts={facts}
+              onJump={onJump}
               sim={sim}
               open={scheduleOpen}
               onToggle={() => setScheduleOpen((v) => !v)}

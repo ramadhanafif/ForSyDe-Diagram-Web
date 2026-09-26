@@ -1163,26 +1163,82 @@ body {
   color: var(--accent);
 }
 
-.schedule-tables {
+.analysis {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 8px 28px;
   align-items: flex-start;
 }
 
-.schedule-tables table {
-  border-collapse: collapse;
+.analysis h4 {
+  margin: 0 0 3px;
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.schedule-tables th {
-  text-align: left;
+.analysis p {
+  margin: 3px 0 6px;
+}
+
+.analysis table {
+  border-collapse: collapse;
+  font-family: ui-monospace, monospace;
+}
+
+.analysis th,
+.analysis td {
+  padding: 1px 8px 1px 0;
+  text-align: right;
+}
+
+.analysis thead th {
   color: var(--fg-dim);
   font-weight: 600;
-  padding: 1px 12px 1px 0;
 }
 
-.schedule-tables td {
-  padding: 1px 12px 1px 0;
+.analysis tbody th {
+  text-align: left;
+  font-weight: normal;
+}
+
+.analysis .an-zero {
+  color: var(--fg-dim);
+  opacity: 0.5;
+}
+
+.analysis .an-bad,
+.analysis .an-bad .an-sig,
+.analysis .an-fail {
+  color: var(--error);
+}
+
+.analysis .an-ok {
+  color: var(--accent);
+}
+
+.analysis ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis li {
+  padding: 1px 0;
+}
+
+.analysis code {
   font-family: ui-monospace, monospace;
+}
+
+.timeline .an-sig {
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-family: ui-monospace, monospace;
+  cursor: pointer;
+  text-decoration: underline dotted;
 }
 
 /* overlays */
