@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { explain } from '../src/app/explain';
 import { scheduleWarning } from '../src/app/scheduleWarning';
+import { analyze } from '../src/core/analysis';
 import { elaborate } from '../src/core/elaborate';
 import { parse } from '../src/core/parser';
 import { computeScheduleAndBuffers } from '../src/core/schedule';
@@ -17,20 +19,21 @@ d_d = delaySDF [0]
 const build = (src: string) => elaborate(parse(src).module).ir!;
 
 describe('scheduleWarning', () => {
-  it('turns a failed schedule into a warning on the actor it names', () => {
+  it('turns a failed schedule into a warning on the actor at fault', () => {
     const ir = build(SELF_LOOP);
     const s = computeScheduleAndBuffers(ir);
-    expect(s.ok).toBe(false);
-    const d = scheduleWarning(ir, s.ok ? '' : s.message);
+    if (s.ok) throw new Error('schedulable');
+    const d = scheduleWarning(explain(SELF_LOOP, ir, s, analyze(ir), null, 1));
     expect(d.severity).toBe('warning');
     expect(d.message).toMatch(/^Not schedulable: .*a_a/);
     expect(SELF_LOOP.slice(d.span.from, d.span.to)).toBe('a_a');
   });
 
-  it('falls back to the system parameters when no process is named', () => {
+  it('points at the system parameters for a disconnected graph', () => {
     const ir = build(SELF_LOOP);
-    const d = scheduleWarning(ir, 'the graph has 2 disconnected parts');
-    const text = SELF_LOOP.slice(d.span.from, d.span.to);
-    expect(text).toContain('s_in');
+    const e = explain(SELF_LOOP, ir, { ok: false, kind: 'rank', message: '' }, null, null, 2);
+    const d = scheduleWarning(e);
+    expect(d.message).toMatch(/2 disconnected parts/);
+    expect(SELF_LOOP.slice(d.span.from, d.span.to)).toContain('s_in');
   });
 });

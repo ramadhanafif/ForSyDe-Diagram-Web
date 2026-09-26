@@ -1742,6 +1742,19 @@ async function deadlockView(page, { url }) {
   );
 }
 
+/** The deadlock's one-click fix edits the text, and the model then has a schedule. */
+async function deadlockFix(page, { url }) {
+  await open(page, url);
+  await load(page, MODEL_DEADLOCK);
+  await waitFor(page, '.sched-fix', 'a fix button in the deadlock banner');
+  const label = await page.eval(() => document.querySelector('.sched-fix').textContent);
+  expect(label === 'Give d_d 2 initial tokens', `fix says '${label}'`);
+  await clickSelectorCenter(page, '.sched-fix');
+  await until(() => page.eval(() => !!window.__fsd.trace()?.periodic), 'a schedule after the fix');
+  expect(!(await exists(page, '.sched-banner')), 'the banner stayed after the fix');
+  expect(/delaySDF \[0,0\]/.test(await doc(page)), 'the delay did not get a second token');
+}
+
 async function inconsistentView(page, { url }) {
   await open(page, url);
   await load(page, MODEL_INCONSISTENT);
@@ -1751,12 +1764,17 @@ async function inconsistentView(page, { url }) {
       .qa('.scene-edge.unbounded')
       .map((el) => el.getAttribute('data-edge-id')),
     marker: !!document.querySelector('.scene-edge.unbounded .overflow-mark'),
-    line: document.querySelector('.sched-detail').textContent,
+    line: document.querySelector('.sched-banner').textContent,
     waiting: document.querySelectorAll('.scene-node.waiting').length,
   }));
   expect(sameSet(got.unbounded, ['e_s_da_d_d_a_a']), `unbounded signals [${got.unbounded}]`);
   expect(got.marker, 'no overflow marker on the unbounded signal');
-  expect(/accumulate on s_da every period/.test(got.line), `explanation says '${got.line}'`);
+  // one verdict, in the model's names: the loop and the ratio it demands, no deadlock
+  expect(
+    /inconsistent rates: around the loop .*q\(a_a\) = 2·q\(a_a\)/.test(got.line) &&
+      !/deadlock/i.test(got.line),
+    `explanation says '${got.line}'`,
+  );
   expect(got.waiting === 0, 'an inconsistent model marks waiting actors');
 }
 
@@ -2268,6 +2286,7 @@ export const scenarios = {
   inlineEdit,
   semanticZoom,
   inconsistentView,
+  deadlockFix,
   layoutTween,
   enterExit,
   tokenTravel,

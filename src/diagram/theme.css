@@ -1242,8 +1242,7 @@ body {
 }
 
 /* overlays */
-.status-chip,
-.sched-banner {
+.status-chip {
   position: absolute;
   left: 12px;
   padding: 4px 10px;
@@ -1259,12 +1258,49 @@ body {
   color: var(--bg);
 }
 
-/* wraps short of the zoom controls in the same corner */
+/* under the diagram, above the timeline: it never covers either */
+.dock {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 55%;
+  min-height: 0;
+}
+
+.dock > .timeline {
+  max-height: none;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+/* the collapsed timeline floats over the diagram's bottom-left corner */
+.dock > .schedule-chip {
+  bottom: calc(100% + 12px);
+}
+
 .sched-banner {
-  bottom: 12px;
-  max-width: calc(100% - 64px);
+  flex: none;
+  padding: 6px 12px;
   background: var(--error);
   color: #fff;
+  font-size: 12px;
+}
+
+.sched-fix {
+  margin-top: 6px;
+  padding: 3px 10px;
+  border: 1px solid #fff;
+  border-radius: 4px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sched-fix:hover {
+  background: rgb(255 255 255 / 0.15);
 }
 
 .empty-canvas {

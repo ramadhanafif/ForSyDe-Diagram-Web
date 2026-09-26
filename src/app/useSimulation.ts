@@ -223,15 +223,3 @@ export function simMarks(
   }
   return marks;
 }
-
-/** One line under the 'Not schedulable' summary: what running the model shows. */
-export function stuckLine(stuck: StuckReport | null): string | null {
-  if (stuck?.kind === 'deadlock') {
-    // no firing count: a source outside the deadlocked part keeps firing
-    const who = stuck.waiting.map((w) => w.actor);
-    return `Deadlock: ${who.join(', ')} wait${who.length === 1 ? 's' : ''} for tokens that never arrive (hover a highlighted actor).`;
-  }
-  if (stuck?.kind === 'unbounded')
-    return `Tokens accumulate on ${stuck.signals.join(', ')} every period: the rates do not balance, so no finite buffer suffices.`;
-  return null;
-}

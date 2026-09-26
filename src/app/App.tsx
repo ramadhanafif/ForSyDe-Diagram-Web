@@ -33,6 +33,7 @@ import { Toolbar, type ExportKind } from './Toolbar';
 import { Timeline } from './Timeline';
 import { analyze } from '../core/analysis';
 import { scheduleWarning } from './scheduleWarning';
+import { explain } from './explain';
 import { download, sceneToSvg, svgToPngBlob } from '../export/svg';
 import { sceneToTikz, tikzPicture } from '../export/tikz';
 import { startTour, TOUR_SEEN_KEY } from './tour';
@@ -49,7 +50,7 @@ import { pinScene } from '../layout/pin';
 import { linkedAt, sourceSpans, type Target } from '../core/links';
 import { inlineEdit, type EditTarget } from '../core/inlineEdit';
 import { edgeId as edgeIdOf } from '../scene/labels';
-import { fillAt, simMarks, stuckLine, useSimulation } from './useSimulation';
+import { fillAt, simMarks, useSimulation } from './useSimulation';
 
 /** Per-annotation visibility, driven by the floating SHOW toggles in the pane. */
 type ShowFlags = Omit<LabelFlags, 'unitRates'>;
@@ -330,26 +331,25 @@ export function App() {
   );
   const parts = useMemo(() => (model ? componentCount(model.ir) : 0), [model]);
   const facts = useMemo(() => (model ? analyze(model.ir) : null), [model]);
-  // why there is no schedule; the rank error on a disconnected graph teaches the wrong concept
-  let schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
-  if (
-    schedError &&
-    pipe.schedule &&
-    !pipe.schedule.ok &&
-    pipe.schedule.kind === 'rank' &&
-    parts > 1
-  )
-    schedError = `the graph has ${parts} disconnected parts; every process must be connected to the rest of the system before a schedule exists`;
+  const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
+  const { trace, stuck, pos } = sim;
+  // why there is no schedule, in the model's names, with a checked fix when one exists
+  const explanation = useMemo(
+    () =>
+      model && !model.schedule.ok
+        ? explain(model.source, model.ir, model.schedule, facts, stuck, parts)
+        : null,
+    [model, facts, stuck, parts],
+  );
+  const schedError = explanation?.message ?? null;
   // the failure also lists with the editor's problems, as a warning on the text as it is
   const diagnostics = useMemo(
     () =>
-      schedError && model && model.source === source
-        ? [...pipe.diagnostics, scheduleWarning(model.ir, schedError)]
+      explanation && model?.source === source
+        ? [...pipe.diagnostics, scheduleWarning(explanation)]
         : pipe.diagnostics,
-    [schedError, model, source, pipe.diagnostics],
+    [explanation, model, source, pipe.diagnostics],
   );
-  const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
-  const { trace, stuck, pos } = sim;
   const marks = useMemo(
     () => (model ? simMarks(model, { trace: showSchedule ? trace : null, stuck, pos }) : undefined),
     [model, trace, stuck, pos, showSchedule],
@@ -742,6 +742,16 @@ export function App() {
     [model, view, diagramTheme, onExportHs],
   );
 
+  const onFix = () => {
+    const fix = explanation?.fix;
+    if (!fix || !model) return;
+    if (editorRef.current?.getDoc() !== model.source) {
+      setNotice({ text: 'diagram is stale, try again once it updates' });
+      return;
+    }
+    editorRef.current.applySplices(fix.splices);
+  };
+
   const onAddDelay = () => {
     setNotice({ text: 'a delay needs a signal: drag the delay chip onto an edge' });
   };
@@ -1051,28 +1061,39 @@ export function App() {
               Showing last valid diagram: {pipe.errorCount} error{pipe.errorCount === 1 ? '' : 's'}
             </div>
           )}
-          {schedError && (
-            <div className="sched-banner">
-              <div>Not schedulable: {schedError}</div>
-              {stuckLine(stuck) && <div className="sched-detail">{stuckLine(stuck)}</div>}
-            </div>
-          )}
           {notice && (
             <div className="notice-toast">
               {notice.text}
               {notice.undo && <button onClick={notice.undo}>Undo</button>}
             </div>
           )}
-          {showSchedule && (trace || facts) && (
-            <Timeline
-              sched={pipe.schedule?.ok ? pipe.schedule : null}
-              facts={facts}
-              onJump={onJump}
-              sim={sim}
-              open={scheduleOpen}
-              onToggle={() => setScheduleOpen((v) => !v)}
-            />
-          )}
+          <div className="dock">
+            {explanation && (
+              <div className="sched-banner" role="alert">
+                <div>Not schedulable: {explanation.message}</div>
+                {explanation.lines.map((l) => (
+                  <div key={l} className="sched-detail">
+                    {l}
+                  </div>
+                ))}
+                {explanation.fix && (
+                  <button className="sched-fix" onClick={onFix}>
+                    {explanation.fix.label}
+                  </button>
+                )}
+              </div>
+            )}
+            {showSchedule && (trace || facts) && (
+              <Timeline
+                sched={pipe.schedule?.ok ? pipe.schedule : null}
+                facts={facts}
+                onJump={onJump}
+                sim={sim}
+                open={scheduleOpen}
+                onToggle={() => setScheduleOpen((v) => !v)}
+              />
+            )}
+          </div>
         </section>
       </main>
     </div>
