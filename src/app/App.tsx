@@ -205,6 +205,8 @@ function componentCount(ir: IRSystem): number {
 }
 
 const NOTICE_TIMEOUT_MS = 5000;
+/** Presenting, a fit may zoom this far: 10 px labels read at 30 px on a small model. */
+const PRESENT_FIT_MAX = 3;
 const FLASH_TIMEOUT_MS = 1800;
 
 /** Keystroke quiet period before the editor text is written to localStorage. */
@@ -291,6 +293,7 @@ export function App() {
     storageGetJson('showFlags', DEFAULT_FLAGS),
   );
   const [legendOpen, setLegendOpen] = useState(false);
+  const [presenting, setPresenting] = useState(false);
   useEffect(() => storageSet('showFlags', JSON.stringify(showFlags)), [showFlags]);
 
   // transient toast for refused gestures, optionally with an undo action
@@ -907,8 +910,42 @@ export function App() {
     [paneCoords],
   );
 
+  const togglePresent = () => {
+    setPresenting((v) => !v);
+    setPopover(null);
+    setMenu(null);
+    setFitRequest((n) => n + 1); // the pane changes size
+  };
+  // presenting: Space plays, the arrow keys step, Esc leaves; P toggles anywhere
+  // outside a text field. Captured, so a focused node does not also nudge.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target instanceof Element ? e.target : null;
+      if (t?.closest('.cm-editor, input, textarea, select, [contenteditable]')) return;
+      const act =
+        e.key === 'p' || e.key === 'P' || (presenting && e.key === 'Escape')
+          ? togglePresent
+          : !presenting
+            ? null
+            : e.key === ' '
+              ? onAnimate
+              : e.key === 'ArrowRight'
+                ? () => sim.step(1)
+                : e.key === 'ArrowLeft'
+                  ? () => sim.step(-1)
+                  : null;
+      if (!act) return;
+      e.preventDefault();
+      e.stopPropagation();
+      act();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
   return (
-    <div className="app">
+    <div className={`app${presenting ? ' presenting' : ''}`}>
       <Toolbar
         example={example}
         onExample={loadExample}
@@ -929,6 +966,8 @@ export function App() {
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
         onToggleAppTheme={() => setAppTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        presenting={presenting}
+        onPresent={togglePresent}
       />
       <main className="panes" ref={panesRef} style={{ ['--split' as string]: splitRatio }}>
         <section className="pane editor-pane">
@@ -969,6 +1008,7 @@ export function App() {
             travel={travel}
             flash={flash}
             fitRequest={fitRequest}
+            fitMax={presenting ? PRESENT_FIT_MAX : undefined}
             consumePendingFit={consumePendingFit}
             onNodeClick={(id, cx, cy) => {
               if (!model?.ir.processes.some((q) => q.name === id)) return;

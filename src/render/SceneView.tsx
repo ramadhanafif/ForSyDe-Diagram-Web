@@ -39,6 +39,8 @@ export interface SceneViewProps {
   flash: string[];
   /** Increment to request a fit-to-view. */
   fitRequest: number;
+  /** Highest zoom a fit may reach; presenting lets a small model fill the screen. */
+  fitMax?: number;
   /** Polled after each scene change; true when a fit is pending (example load). */
   /** True once, when a fit is pending for the model with this source (example load, open). */
   consumePendingFit(source: string): boolean;
@@ -277,7 +279,7 @@ function anchorOf(scene: Scene, hit: Hit): Pt | null {
  * editing itself happens in App.
  */
 export function SceneView(p: SceneViewProps) {
-  const { pane: wrap, view, bind, fit, zoomBy } = usePanZoom(isBackground);
+  const { pane: wrap, view, bind, fit, zoomBy } = usePanZoom(isBackground, p.fitMax);
   const [selected, setSelected] = useState<Hit | null>(null);
   const [hover, setHover] = useState<Hit | null>(null);
   const [editingState, setEditing] = useState<Editing | null>(null);

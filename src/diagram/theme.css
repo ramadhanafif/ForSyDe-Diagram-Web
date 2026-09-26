@@ -771,6 +771,24 @@ body {
   white-space: nowrap;
 }
 
+/* presenting: the diagram alone, the toolbar down to what a lecture needs */
+.app.presenting .panes {
+  grid-template-columns: 1fr;
+}
+
+.app.presenting .editor-pane,
+.app.presenting .splitter,
+.app.presenting .float-controls,
+.app.presenting .legend,
+.app.presenting .toolbar-items > :not(.keep) {
+  display: none;
+}
+
+/* the lecture-notes buffer size in full ink: grey read as a minus from the back row */
+.diagram-lecture .label-buffer {
+  color: var(--fg);
+}
+
 /* lecture style keeps the terse black notation, so the legend follows */
 .diagram-lecture .legend-rate,
 .diagram-lecture .legend-buffer {

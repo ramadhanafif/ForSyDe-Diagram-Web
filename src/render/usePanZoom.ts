@@ -39,7 +39,7 @@ const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y) || 1;
  * on `isBackground` pans, two touches pinch. `pane` and the `bind` handlers go
  * on the pane element; `view` is the transform for its content layer.
  */
-export function usePanZoom(isBackground: (target: EventTarget) => boolean) {
+export function usePanZoom(isBackground: (target: EventTarget) => boolean, fitMax = FIT_MAX_ZOOM) {
   const pane = useRef<HTMLDivElement>(null);
   const [view, setViewState] = useState<View>({ k: 1, tx: 0, ty: 0 });
   const viewRef = useRef(view);
@@ -85,11 +85,7 @@ export function usePanZoom(isBackground: (target: EventTarget) => boolean) {
       const W = el.clientWidth;
       const H = el.clientHeight;
       const k = clampK(
-        Math.min(
-          W / (frame.w * (1 + FIT_PADDING)),
-          H / (frame.h * (1 + FIT_PADDING)),
-          FIT_MAX_ZOOM,
-        ),
+        Math.min(W / (frame.w * (1 + FIT_PADDING)), H / (frame.h * (1 + FIT_PADDING)), fitMax),
       );
       const to = {
         k,
@@ -99,7 +95,7 @@ export function usePanZoom(isBackground: (target: EventTarget) => boolean) {
       if (jumpIf?.(viewRef.current, to)) jump(to);
       else animateTo(to);
     },
-    [animateTo, jump],
+    [animateTo, jump, fitMax],
   );
 
   const zoomBy = useCallback(

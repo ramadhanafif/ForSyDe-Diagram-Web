@@ -1071,6 +1071,40 @@ async function arrowKeys(page, { url }) {
   );
 }
 
+/** Present: P hides the editor and zooms in, Space plays, arrows step (never nudge), Esc leaves. */
+async function presentMode(page, { url }) {
+  await open(page, url);
+  await load(page, MODEL);
+  const k = () =>
+    page.eval(() => {
+      const m = /scale\(([\d.]+)\)/.exec(document.querySelector('.scene-viewport').style.transform);
+      return m ? Number(m[1]) : 0;
+    });
+  const k0 = await k();
+  const b0 = nodeBox(await scene(page), 'a_b');
+  // a focused node must not take the arrows as a nudge while presenting
+  await page.eval(() => document.querySelector('[data-node-id="a_b"]').focus());
+  await page.key('p');
+  await settle(page);
+  expect(await exists(page, '.app.presenting'), 'P did not start presenting');
+  expect(
+    await page.eval(() => getComputedStyle(document.querySelector('.editor-pane')).display === 'none'),
+    'the editor is still shown',
+  );
+  await until(async () => (await k()) > k0 * 1.3, `a bigger fit than ${k0}`);
+  await page.key('ArrowRight');
+  await page.key('ArrowRight');
+  const at = await page.eval(() => document.querySelector('.tl-pos').textContent);
+  expect(/^step 2\//.test(at), `arrows stepped to '${at}'`);
+  const b1 = nodeBox(await scene(page), 'a_b');
+  expect(b1.x === b0.x && b1.y === b0.y, 'an arrow nudged the focused node');
+  await page.key(' ');
+  await waitFor(page, '.timeline [aria-label="pause"]', 'Space to start playing');
+  await page.key('Escape');
+  expect(!(await exists(page, '.app.presenting')), 'Esc did not leave present mode');
+  expect(!!(await doc(page)).length, 'the editor lost its text');
+}
+
 /** A reload restores the text and the pinned layout from localStorage. */
 async function reloadRestores(page, { url }) {
   await open(page, url);
@@ -2272,6 +2306,7 @@ export const scenarios = {
   nodeDrag,
   pinAndTidy,
   arrowKeys,
+  presentMode,
   reloadRestores,
   hsRoundTrip,
   newModel,

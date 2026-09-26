@@ -36,6 +36,8 @@ export interface ToolbarProps {
   diagramTheme: 'modern' | 'lecture';
   onToggleDiagramTheme(): void;
   onToggleAppTheme(): void;
+  presenting: boolean;
+  onPresent(): void;
 }
 
 export function Toolbar(p: ToolbarProps) {
@@ -66,6 +68,7 @@ export function Toolbar(p: ToolbarProps) {
           }}
         />
         <select
+          className="keep"
           title="Load example"
           value={p.example}
           onChange={(e) => p.onExample(e.target.value)}
@@ -91,7 +94,7 @@ export function Toolbar(p: ToolbarProps) {
           Tidy
         </button>
         <button
-          className={`animate-button${p.animating ? ' active' : ''}`}
+          className={`animate-button keep${p.animating ? ' active' : ''}`}
           aria-pressed={p.animating}
           disabled={!p.canAnimate}
           title={
@@ -163,12 +166,27 @@ export function Toolbar(p: ToolbarProps) {
           </span>
         </span>
         <button
+          className="keep"
           title="Switch between modern and lecture-notes diagram styles"
           onClick={p.onToggleDiagramTheme}
         >
           {p.diagramTheme === 'modern' ? 'Lecture style' : 'Modern style'}
         </button>
-        <button onClick={p.onToggleAppTheme}>Theme</button>
+        <button className="keep" onClick={p.onToggleAppTheme}>
+          Theme
+        </button>
+        <button
+          className={`keep${p.presenting ? ' active' : ''}`}
+          aria-pressed={p.presenting}
+          title={
+            p.presenting
+              ? 'Back to the editor (Esc)'
+              : 'Present: the diagram fills the screen; Space plays, arrow keys step (P)'
+          }
+          onClick={p.onPresent}
+        >
+          {p.presenting ? 'Exit present' : 'Present'}
+        </button>
         <button
           className="tour-replay"
           title="Replay the guided tour of the interface"
