@@ -39,7 +39,9 @@ function system(
   return { inputs, outputs, processes, signals, spans: emptySpans };
 }
 
-// Test systems ported verbatim from forsyde-devtools test/SDFScheduleSpec.hs
+// Test systems ported verbatim from forsyde-devtools test/SDFScheduleSpec.hs.
+// Repetitions and verdicts match devtools; the firing order is round robin
+// (lecture notes), so exampleSystem4 and exampleSystem6 differ from devtools.
 
 describe('SDF scheduling golden tests (SDFScheduleSpec.hs)', () => {
   it('exampleSystem1: single actor with self loop', () => {
@@ -124,7 +126,7 @@ describe('SDF scheduling golden tests (SDFScheduleSpec.hs)', () => {
       ],
     );
     const r = computeScheduleAndBuffers(ir);
-    expect(r.ok && r.schedule).toEqual(['actor_a', 'actor_a', 'actor_b', 'actor_c', 'actor_d']);
+    expect(r.ok && r.schedule).toEqual(['actor_a', 'actor_b', 'actor_a', 'actor_c', 'actor_d']);
     expect(r.ok && r.buffers).toEqual([
       ['s_ina', 4],
       ['s_inb', 1],
@@ -188,16 +190,18 @@ describe('SDF scheduling golden tests (SDFScheduleSpec.hs)', () => {
       ],
     );
     const r = computeScheduleAndBuffers(ir);
+    // round robin loses here: c writes 4 per firing and a reads 2, so giving
+    // c a turn after every a grows s4 to 10 where devtools' order needs 4
     // prettier-ignore
     expect(r.ok && r.schedule).toEqual([
-      'd', 'c', 'a', 'a', 'c', 'a', 'a', 'b', 'c', 'a', 'a', 'c', 'a', 'a', 'b',
+      'd', 'c', 'a', 'c', 'a', 'c', 'a', 'c', 'a', 'b', 'a', 'a', 'a', 'a', 'b',
     ]);
     expect(r.ok && r.buffers).toEqual([
       ['s_in', 16],
       ['s_out', 1],
       ['s1', 4],
       ['s3', 4],
-      ['s4', 4],
+      ['s4', 10],
       ['s2_delay', 2],
     ]);
   });
@@ -244,5 +248,84 @@ describe('SDF scheduling golden tests (SDFScheduleSpec.hs)', () => {
     );
     const r = computeScheduleAndBuffers(ir);
     expect(!r.ok && r.kind).toBe('deadlock');
+  });
+});
+
+describe('graphs the devtools scheduler rejected', () => {
+  it('schedules a disconnected graph part by part, q minimal within each part', () => {
+    const ir = system(
+      ['in1', 'in2'],
+      ['out1', 'out2'],
+      [actor('a', 'Actor11'), actor('b', 'Actor11'), actor('c', 'Actor11'), actor('e', 'Actor11')],
+      [
+        sig('in1', 'in1', 1, 'a', 1),
+        sig('s1', 'a', 2, 'b', 3),
+        sig('out1', 'b', 1, 'out1', 1),
+        sig('in2', 'in2', 1, 'c', 1),
+        sig('s2', 'c', 1, 'e', 1),
+        sig('out2', 'e', 1, 'out2', 1),
+      ],
+    );
+    const r = computeScheduleAndBuffers(ir);
+    if (!r.ok) throw new Error(r.message);
+    expect(Object.fromEntries(r.repetitions)).toEqual({ a: 3, b: 2, c: 1, e: 1 });
+    expect(r.rank).toBe(2);
+    expect(r.schedule).toHaveLength(7);
+  });
+
+  it('still rejects an inconsistent part of a disconnected graph', () => {
+    const ir = system(
+      ['in1', 'in2'],
+      ['out1', 'out2'],
+      [actor('a', 'Actor21'), actor('b', 'Actor12'), actor('c', 'Actor11')],
+      [
+        sig('in1', 'in1', 1, 'a', 1),
+        sig('s1', 'a', 2, 'b', 3),
+        sig('s2', 'b', 1, 'a', 1),
+        sig('out1', 'b', 1, 'out1', 1),
+        sig('in2', 'in2', 1, 'c', 1),
+        sig('out2', 'c', 1, 'out2', 1),
+      ],
+    );
+    const r = computeScheduleAndBuffers(ir);
+    expect(!r.ok && r.kind).toBe('rank');
+  });
+
+  it('treats an actor behind a delay on a system input as an input actor', () => {
+    const ir = system(
+      ['s_in'],
+      ['s_out'],
+      [delay('d', [0]), actor('a', 'Actor11'), actor('b', 'Actor11')],
+      [
+        sig('s_in', 's_in', 1, 'd', 1),
+        sig('s_1', 'd', 1, 'a', 1),
+        sig('s_2', 'a', 1, 'b', 1),
+        sig('s_out', 'b', 1, 's_out', 1),
+      ],
+    );
+    const r = computeScheduleAndBuffers(ir);
+    expect(r.ok && r.schedule).toEqual(['a', 'b']);
+  });
+
+  it('folds a chain of delays into one edge with the summed tokens', () => {
+    const ir = system(
+      ['s_in'],
+      ['s_out'],
+      [actor('a', 'Actor21'), actor('b', 'Actor12'), delay('d1', [0]), delay('d2', [0])],
+      [
+        sig('s_in', 's_in', 1, 'a', 1),
+        sig('s_1', 'a', 2, 'b', 1),
+        sig('s_2', 'b', 1, 'd1', 1),
+        sig('s_3', 'd1', 1, 'd2', 1),
+        sig('s_4', 'd2', 1, 'a', 2),
+        sig('s_out', 'b', 1, 's_out', 1),
+      ],
+    );
+    const r = computeScheduleAndBuffers(ir);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.schedule).toEqual(['a', 'b', 'b']);
+    expect(r.buffers).toContainEqual(['s_2', 2]);
+    expect(r.aliases.get('s_4')).toBe('s_2');
+    expect(r.aliases.get('s_3')).toBe('s_2');
   });
 });

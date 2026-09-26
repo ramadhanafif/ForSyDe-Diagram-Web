@@ -45,6 +45,8 @@ export interface ProcessSpans {
   systemBindings: Span[];
   /** The process name identifier inside each system binding. */
   bindingProcs: Span[];
+  /** Written inline in its binding (`x = delaySDF [0] y`): no spec of its own to rename or delete. */
+  inline?: boolean;
 }
 
 export interface SpanIndex {

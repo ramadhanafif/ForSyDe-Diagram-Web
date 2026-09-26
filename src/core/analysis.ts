@@ -37,7 +37,7 @@ export interface Analysis {
   /** Rows are channels, columns actors: prod at the source, -cons at the destination. */
   gamma: number[][];
   rank: number;
-  /** Minimal positive repetition vector; null when inconsistent or disconnected. */
+  /** Minimal positive repetition vector, minimal within each connected part; null when inconsistent. */
   q: Map<string, number> | null;
   conflict: Conflict | null;
   /** Weakly connected parts of the actor graph. */
@@ -47,8 +47,12 @@ export interface Analysis {
 const frac = (r: Rat): [number, number] => [Number(r.n), Number(r.d)];
 const eq = (a: Rat, b: Rat) => a.n === b.n && a.d === b.d;
 
-/** Null when the model has no channel structure yet (bad delay wiring, a dangling signal). */
-export function analyze(ir: IRSystem): Analysis | null {
+/**
+ * Null when the model has no channel structure yet (bad delay wiring, a
+ * dangling signal). `rank` is the scheduler's (ScheduleResult.rank), so Γ is
+ * not row-reduced twice; without it a consistent Γ has rank actors − parts.
+ */
+export function analyze(ir: IRSystem, rank?: number): Analysis | null {
   const conv = buildChannels(ir);
   if ('error' in conv) return null;
   const actors = conv.actors.map((a) => a.name);
@@ -79,17 +83,15 @@ export function analyze(ir: IRSystem): Analysis | null {
             : 0,
     ),
   );
-  const rank = channels.length
-    ? rowReduce(gamma.map((row) => row.map((v) => rat(BigInt(v))))).pivots.length
-    : 0;
-
   // spanning forest: q relative to each part's root, and each actor's tree edge up
   const q = new Map<string, Rat>();
   const up = new Map<string, { ch: Channel; parent: string }>();
+  const partOf = new Map<string, number>();
   let parts = 0;
   for (const root of actors) {
     if (q.has(root)) continue;
     parts++;
+    partOf.set(root, parts);
     q.set(root, rat(1n));
     const queue = [root];
     while (queue.length) {
@@ -107,6 +109,7 @@ export function analyze(ir: IRSystem): Analysis | null {
             : mul(qu, rat(BigInt(c.cons), BigInt(c.prod))),
         );
         up.set(v, { ch: c, parent: u });
+        partOf.set(v, parts);
         queue.push(v);
       }
     }
@@ -154,12 +157,19 @@ export function analyze(ir: IRSystem): Analysis | null {
     if (conflict) break;
   }
 
-  const reps =
-    conflict || parts !== 1
-      ? null
-      : new Map(
-          toMinimalIntegers(actors.map((a) => q.get(a)!)).map((v, i) => [actors[i]!, Number(v)]),
-        );
+  // minimal integers within each part: parts share no balance equation
+  const reps = conflict ? null : new Map(actors.map((a) => [a, 0]));
+  for (let p = 1; reps && p <= parts; p++) {
+    const members = actors.filter((a) => partOf.get(a) === p);
+    toMinimalIntegers(members.map((a) => q.get(a)!)).forEach((v, i) =>
+      reps.set(members[i]!, Number(v)),
+    );
+  }
+  rank ??= !channels.length
+    ? 0
+    : conflict
+      ? rowReduce(gamma.map((row) => row.map((v) => rat(BigInt(v))))).pivots.length
+      : actors.length - parts;
   return { actors, channels, gamma, rank, q: reps, conflict, parts };
 }
 

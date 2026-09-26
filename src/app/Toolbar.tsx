@@ -80,7 +80,7 @@ export interface ToolbarProps {
   canAnimate: boolean;
   /** Why there is nothing to play (no schedule, errors); null when there is. */
   animateBlocked?: string | null;
-  /** The model plays but has no schedule: it runs until it gets stuck. */
+  /** The model plays but has no schedule: it runs until it deadlocks or its buffers grow. */
   animateWarning?: string | null;
   /** The text has errors and the diagram is the last valid one. */
   stale: boolean;
@@ -291,7 +291,7 @@ export function Toolbar(p: ToolbarProps) {
           title={
             p.animateBlocked ??
             (p.animateWarning
-              ? `${p.animateWarning}. Animate plays until the model gets stuck.`
+              ? `${p.animateWarning}. Animate plays until it deadlocks or its buffers grow without bound.`
               : !p.canAnimate
                 ? 'Nothing to run: fix the errors or connect the model first'
                 : p.stale

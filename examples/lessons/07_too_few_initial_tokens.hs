@@ -2,7 +2,8 @@ module Lesson07 where
 
 -- Lesson 7: a delay with too few initial tokens.
 -- The rates are consistent: a_step fires twice for each a_pair firing. But
--- a_step needs 2 tokens around the loop per iteration and d_1 holds only 1.
+-- a_pair must read 2 tokens from s_1 before it writes any back, and d_1 lets
+-- a_step fire only once.
 
 import ForSyDe.Shallow
 

@@ -35,14 +35,15 @@ export function Analysis({
   onJump?(t: Target): void;
 }) {
   const timing = times.size ? selfTimed(facts, times) : null;
-  const { actors, channels, gamma, rank, q, conflict } = facts;
+  const { actors, channels, gamma, rank, q, conflict, parts } = facts;
   const bad = new Set(conflict ? [...conflict.pathA, ...conflict.pathB] : []);
   const sig = (c: Channel) => (
     <button className="an-sig" onClick={() => onJump?.({ kind: 'edge', signal: c.signal })}>
       {rowName(c)}
     </button>
   );
-  const want = actors.length - 1;
+  // a connected graph needs rank actors − 1; each unconnected part takes one more
+  const want = actors.length - parts;
   return (
     <div className="analysis">
       {channels.length > 0 && (
@@ -71,7 +72,8 @@ export function Analysis({
             </tbody>
           </table>
           <p className={rank === want ? 'an-ok' : 'an-fail'}>
-            rank Γ = {rank}, actors − 1 = {want} {rank === want ? '✓ consistent' : '✗ inconsistent'}
+            rank Γ = {rank}, {parts === 1 ? 'actors − 1' : `actors − ${parts} parts`} = {want}{' '}
+            {rank === want ? '✓ consistent' : '✗ inconsistent'}
           </p>
         </section>
       )}
@@ -119,7 +121,8 @@ export function Analysis({
         <section>
           <h4>buffers for this schedule</h4>
           <p className="an-note">
-            the first ready actor fires, in declaration order; another valid schedule can need less
+            round robin: after a firing, the next ready actor in declaration order fires; another
+            valid schedule can need less. Inputs: one iteration read up front.
           </p>
           <table className="an-buffers">
             <tbody>

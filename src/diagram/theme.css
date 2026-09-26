@@ -1549,6 +1549,12 @@ body.tour-lift .driver-overlay {
 }
 
 /* overlays */
+/* the diagram pane crashed while rendering; the editor is still there */
+.diagram-crash {
+  padding: 24px;
+  color: var(--error);
+}
+
 .status-chip {
   position: absolute;
   left: 12px;
