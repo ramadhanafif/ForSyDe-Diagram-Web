@@ -1,4 +1,4 @@
-/** Blank model for the New button: one input through one actor to one output. */
+/** Blank model for File > New: one input through one actor to one output. */
 export const BLANK_MODEL = `module Model where
 
 import ForSyDe.Shallow
