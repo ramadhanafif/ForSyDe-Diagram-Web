@@ -73,7 +73,7 @@ interface FsdHandle {
   setSource(src: string): void;
   scene(): Scene | null;
   ir(): IRSystem | null;
-  /** One simulated schedule period, when the model has a schedule. */
+  /** What playback shows: one schedule period, else the start of a stuck run. */
   trace(): SimTrace | null;
   /** A layout transition or token travel is running (or only that kind). */
   animating(kind?: 'layout' | 'tokens'): boolean;

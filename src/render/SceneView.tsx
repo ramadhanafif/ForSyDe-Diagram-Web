@@ -44,8 +44,10 @@ export interface SceneViewProps {
   fitMax?: number;
   /** Lowest zoom a fit may reach; a phone pans rather than shrink labels to dust. */
   fitMin?: number;
-  /** Polled after each scene change; true when a fit is pending (example load). */
-  /** True once, when a fit is pending for the model with this source (example load, open). */
+  /**
+   * Polled after each scene change: true once, when a fit is pending for the
+   * model with this source (example load, open).
+   */
   consumePendingFit(source: string): boolean;
   /** Coordinates are client coordinates. */
   onNodeClick(id: string, x: number, y: number): void;

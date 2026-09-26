@@ -1817,7 +1817,7 @@ body.tour-lift .driver-overlay {
 
 /* ------------------------------------------------------------------ */
 /* phones (App.tsx COMPACT_QUERY): one pane at a time, the toolbar in  */
-/* one scrolling row, the SHOW panel folded, the popover a bottom sheet */
+/* one row, the SHOW panel folded, the popover a bottom sheet          */
 
 @media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
   .toolbar {
