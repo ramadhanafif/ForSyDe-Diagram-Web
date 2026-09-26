@@ -29,11 +29,17 @@ describe('scheduleWarning', () => {
     expect(SELF_LOOP.slice(d.span.from, d.span.to)).toBe('a_a');
   });
 
-  it('points at the system parameters for a disconnected graph', () => {
-    const ir = build(SELF_LOOP);
-    const e = explain(SELF_LOOP, ir, { ok: false, kind: 'rank', message: '' }, null, null, 2);
-    const d = scheduleWarning(e);
-    expect(d.message).toMatch(/2 disconnected parts/);
-    expect(SELF_LOOP.slice(d.span.from, d.span.to)).toContain('s_in');
+  it('blames the inconsistent part of a disconnected graph, not the disconnection', () => {
+    const src = SELF_LOOP.replace(
+      'system s_in = s_out',
+      'system s_in s_in2 = (s_out, s_out2)',
+    ).replace('    s_2 = d_d s_1', '    s_2 = d_d s_1\n    s_out2 = a_b s_in2') + 'a_b = actor11SDF 1 1 f\n';
+    const ir = build(src);
+    const s = computeScheduleAndBuffers(ir);
+    if (s.ok) throw new Error('schedulable');
+    const e = explain(src, ir, s, analyze(ir), null, 2);
+    expect(e.message).toMatch(/^inconsistent rates: around the loop s_1/);
+    expect(e.lines).toContain('the graph has 2 unconnected parts, each scheduled on its own');
+    expect(scheduleWarning(e).message).not.toMatch(/disconnected/);
   });
 });

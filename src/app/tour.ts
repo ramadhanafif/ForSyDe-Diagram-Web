@@ -149,7 +149,7 @@ const LEARN: LearnStep[] = [
     element: '.analysis',
     title: 'The same in matrix form',
     description:
-      'The topology matrix Γ has a row per channel: + tokens written, − tokens read. The rates are consistent when rank Γ = actors − 1, and q solves Γ·q = 0.',
+      'The topology matrix Γ has a row per channel: + tokens written, − tokens read. For a connected graph the rates are consistent when rank Γ = actors − 1, and q solves Γ·q = 0.',
   },
   {
     load: '05_deadlock',
