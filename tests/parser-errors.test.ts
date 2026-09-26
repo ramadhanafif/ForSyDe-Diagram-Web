@@ -133,6 +133,83 @@ a_c = actor11SDF 1000 1 f
   });
 });
 
+describe('root-cause diagnostics', () => {
+  function diagsOf(source: string): Diagnostic[] {
+    const { module: mod, diagnostics } = parse(source);
+    return orderDiagnostics([...diagnostics, ...elaborate(mod).diagnostics]);
+  }
+  const first = (source: string) => diagsOf(source)[0]?.message;
+  const spec = (to: string) => MODEL.replace('a_a = actor11SDF 1 1 f', to);
+
+  it('names a near-miss constructor instead of the unknown process', () => {
+    const src = spec('a_a = actor11sdf 1 1 f');
+    const d = diagsOf(src);
+    expect(d.map((x) => x.message)).toEqual([
+      "Unknown constructor 'actor11sdf': did you mean actor11SDF?",
+    ]);
+    expect(src.slice(d[0]!.span.from, d[0]!.span.to)).toBe('actor11sdf');
+  });
+
+  it('reports a zero rate alone', () => {
+    expect(diagsOf(spec('a_a = actor11SDF 0 1 f')).map((d) => d.message)).toEqual([
+      'Rates must be positive integers, got 0',
+    ]);
+  });
+
+  it('asks for a rate tuple on a multi-input actor', () => {
+    const src = spec('a_a = actor21SDF 2 1 1 f');
+    const d = diagsOf(src);
+    expect(d[0]!.message).toBe(
+      'actor21SDF takes its 2 input rates as a tuple: actor21SDF (2, 1) 1 f',
+    );
+    expect(src.slice(d[0]!.span.from, d[0]!.span.to)).toBe('2');
+    expect(first(spec('a_a = actor12SDF 1 1 2 f'))).toBe(
+      'actor12SDF takes its 2 output rates as a tuple: actor12SDF 1 (1, 2) f',
+    );
+  });
+
+  it('asks for a named function instead of a lambda', () => {
+    expect(diagsOf(spec('a_a = actor11SDF 1 1 (\\x -> x)')).map((d) => d.message)).toEqual([
+      'Name the function at top level and pass its name: f_1 [x] = [x]',
+    ]);
+  });
+
+  it('reports a missing where on the system head', () => {
+    const src = MODEL.replace('  where\n', '');
+    expect(first(src)).toMatch(/^The system's bindings need a 'where' block/);
+    expect(diagsOf(src).map((d) => d.code)).not.toContain('unknown-signal');
+  });
+
+  it('reports unindented bindings instead of unknown signals', () => {
+    const src = MODEL.replace('    s_1 = a_a', 's_1 = a_a').replace(
+      '    s_out = a_b',
+      's_out = a_b',
+    );
+    const d = diagsOf(src);
+    expect(d.map((x) => x.code)).toEqual(['unindented-binding', 'unindented-binding']);
+    expect(d[0]!.message).toBe(
+      "This binding is not indented, so it is outside the system's 'where' block",
+    );
+  });
+
+  it('reports only no-where when the where is missing and the body is at column 0', () => {
+    const src = MODEL.replace('  where\n', '')
+      .replace('    s_1 = a_a', 's_1 = a_a')
+      .replace('    s_out = a_b', 's_out = a_b');
+    expect(diagsOf(src).map((d) => d.code)).toEqual(['no-where']);
+  });
+
+  it('reports an unsupported binding alone', () => {
+    expect(
+      diagsOf(MODEL.replace('s_out = a_b s_1', 's_out = a_b $ s_1')).map((d) => d.message),
+    ).toEqual(['Only applications of a named process to signal names are supported here']);
+  });
+
+  it('leaves ordinary function definitions alone', () => {
+    expect(errorsOf(`${MODEL}g x = f x\nactor = 1\n`)).toEqual([]);
+  });
+});
+
 describe('find-my-errors helpers', () => {
   const diag = (severity: 'error' | 'warning', from: number): Diagnostic => ({
     severity,

@@ -106,4 +106,8 @@ export interface HsModule {
   system: SystemDecl | null;
   procSpecs: ProcSpec[];
   procSpecsEnd: number; // insertion offset for new process specs
+  /** Process specs that were recognised but failed to parse; each already has its own error. */
+  brokenSpecs: Set<string>;
+  /** Signals produced by bindings the parser reported and dropped; skip unknown-signal for them. */
+  strandedSignals: Set<string>;
 }

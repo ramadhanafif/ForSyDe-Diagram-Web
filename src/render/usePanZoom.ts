@@ -39,7 +39,11 @@ const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y) || 1;
  * on `isBackground` pans, two touches pinch. `pane` and the `bind` handlers go
  * on the pane element; `view` is the transform for its content layer.
  */
-export function usePanZoom(isBackground: (target: EventTarget) => boolean) {
+export function usePanZoom(
+  isBackground: (target: EventTarget) => boolean,
+  fitMax = FIT_MAX_ZOOM,
+  fitMin = MIN_ZOOM,
+) {
   const pane = useRef<HTMLDivElement>(null);
   const [view, setViewState] = useState<View>({ k: 1, tx: 0, ty: 0 });
   const viewRef = useRef(view);
@@ -85,21 +89,20 @@ export function usePanZoom(isBackground: (target: EventTarget) => boolean) {
       const W = el.clientWidth;
       const H = el.clientHeight;
       const k = clampK(
-        Math.min(
-          W / (frame.w * (1 + FIT_PADDING)),
-          H / (frame.h * (1 + FIT_PADDING)),
-          FIT_MAX_ZOOM,
+        Math.max(
+          fitMin,
+          Math.min(W / (frame.w * (1 + FIT_PADDING)), H / (frame.h * (1 + FIT_PADDING)), fitMax),
         ),
       );
-      const to = {
-        k,
-        tx: W / 2 - (frame.x + frame.w / 2) * k,
-        ty: H / 2 - (frame.y + frame.h / 2) * k,
-      };
+      // held at fitMin, a frame larger than the pane shows its start (the inputs)
+      // and pans for the rest, instead of cutting both ends
+      const start = (size: number, at: number, len: number) =>
+        len * k > size ? (size * FIT_PADDING) / 2 - at * k : size / 2 - (at + len / 2) * k;
+      const to = { k, tx: start(W, frame.x, frame.w), ty: start(H, frame.y, frame.h) };
       if (jumpIf?.(viewRef.current, to)) jump(to);
       else animateTo(to);
     },
-    [animateTo, jump],
+    [animateTo, jump, fitMax, fitMin],
   );
 
   const zoomBy = useCallback(

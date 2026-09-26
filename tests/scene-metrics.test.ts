@@ -529,13 +529,20 @@ describe('validateScene', () => {
     expect(errs).toEqual(['port a_a.in.s_in: at (100, 50) is off the node outline']);
   });
 
-  it('wants ports ordered top to bottom by index', () => {
+  // ports may sit in any order on their side (layout reorders them to save
+  // a crossing and tags them with index labels), but each keeps its index
+  it('wants the argument index on every port, and ports on a side apart', () => {
     const errs = errorsAfter((s) => {
       port(s, 'a_a.in.s_in').index = 1;
       port(s, 'a_a.in.s_2').index = 0;
     });
-    expect(errs).toContain('port a_a.in.s_in: index 1, expected 0');
-    expect(errs).toContain('port a_a.in.s_in: index 1 is not below a_a.in.s_2');
+    expect(errs).toEqual([
+      'port a_a.in.s_in: index 1, expected 0',
+      'port a_a.in.s_2: index 0, expected 1',
+    ]);
+    expect(
+      errorsAfter((s) => (port(s, 'a_a.in.s_2').at = { ...port(s, 'a_a.in.s_in').at })),
+    ).toContain(`node a_a: two in ports at y ${port(validScene(), 'a_a.in.s_in').at.y}`);
   });
 
   it('wants inputs in the first layer and outputs in the last', () => {

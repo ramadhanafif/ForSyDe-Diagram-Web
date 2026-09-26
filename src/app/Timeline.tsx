@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import type { Analysis as Facts } from '../core/analysis';
+import type { Target } from '../core/links';
 import type { ScheduleOk } from '../core/schedule';
+import { Analysis } from './Analysis';
 import type { SimStep, SimTrace } from '../sim/simulate';
 import { SPEEDS, type Simulation } from './useSimulation';
 
@@ -48,64 +51,34 @@ function Sparkline({ values, max, pos }: { values: number[]; max: number; pos: n
   );
 }
 
-function Tables({ sched }: { sched: ScheduleOk }) {
-  return (
-    <div className="schedule-tables">
-      <table>
-        <thead>
-          <tr>
-            <th>actor</th>
-            <th>reps</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...sched.repetitions].map(([name, q]) => (
-            <tr key={name}>
-              <td>{name}</td>
-              <td>{q}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <table>
-        <thead>
-          <tr>
-            <th>signal</th>
-            <th>buffer</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sched.buffers.map(([name, size]) => (
-            <tr key={name}>
-              <td>{name}</td>
-              <td>{size}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 /**
  * The schedule as a playable timeline: one cell per step of one period (the
  * inputs producing, the actor firings, the outputs taking), the current one
  * highlighted, and under them each signal's token count over the period with
  * its maximum (the buffer size it needs) marked. Without a schedule it replays
- * how the model gets stuck. Collapsed, it is a one-line summary chip.
+ * how the model gets stuck, and with nothing to play it holds only the
+ * analysis. Collapsed, it is a one-line summary chip.
  */
 export function Timeline({
   sched,
+  facts,
   sim,
   open,
   onToggle,
+  onJump,
+  times,
 }: {
   sched: ScheduleOk | null;
+  facts: Facts | null;
   sim: Simulation;
   open: boolean;
   onToggle(): void;
+  onJump?(t: Target): void;
+  times: Map<string, number>;
 }) {
-  const [tables, setTables] = useState(false);
+  const [tablesOn, setTables] = useState(false);
+  // nothing to play: the analysis is all there is to show
+  const tables = tablesOn || !sim.trace;
   const { trace, pos } = sim;
   const n = trace?.steps.length ?? 0;
   if (!open) {
@@ -113,61 +86,82 @@ export function Timeline({
     return (
       <button className="schedule-chip" title="Show the schedule timeline" onClick={onToggle}>
         {sched
-          ? `schedule: ${sched.schedule.length} firings, max buffer ${maxBuffer}`
-          : `stuck run: ${n} steps`}
+          ? `iteration: ${n} steps, max buffer ${maxBuffer}`
+          : trace
+            ? `stuck run: ${n} steps`
+            : 'analysis'}
       </button>
     );
   }
   return (
     <div className="timeline">
       <div className="tl-bar">
-        <button aria-label="reset" title="Back to the initial state" onClick={sim.reset}>
-          ⏮
-        </button>
-        <button aria-label="step back" title="Undo the last firing" onClick={() => sim.step(-1)}>
-          ◀
-        </button>
-        <button
-          aria-label={sim.playing ? 'pause' : 'play'}
-          className="tl-play"
-          title="Play the period; it loops"
-          onClick={sim.toggle}
-        >
-          {sim.playing ? '❚❚' : '▶'}
-        </button>
-        <button aria-label="step forward" title="Fire the next actor" onClick={() => sim.step(1)}>
-          ▶|
-        </button>
-        <span className="tl-speed" role="group" aria-label="playback speed" title="Playback speed">
-          {SPEEDS.map((s) => (
-            <button
-              key={s}
-              className={sim.speed === s ? 'active' : ''}
-              aria-pressed={sim.speed === s}
-              onClick={() => sim.setSpeed(s)}
-            >
-              {s}x
+        {trace && (
+          <>
+            <button aria-label="reset" title="Back to the initial state" onClick={sim.reset}>
+              ⏮
             </button>
-          ))}
-        </span>
+            <button
+              aria-label="step back"
+              title="Undo the last firing"
+              onClick={() => sim.step(-1)}
+            >
+              ◀
+            </button>
+            <button
+              aria-label={sim.playing ? 'pause' : 'play'}
+              className="tl-play"
+              title="Play one iteration; it loops"
+              onClick={sim.toggle}
+            >
+              {sim.playing ? '❚❚' : '▶'}
+            </button>
+            <button
+              aria-label="step forward"
+              title="Fire the next actor"
+              onClick={() => sim.step(1)}
+            >
+              ▶|
+            </button>
+            <span
+              className="tl-speed"
+              role="group"
+              aria-label="playback speed"
+              title="Playback speed"
+            >
+              {SPEEDS.map((s) => (
+                <button
+                  key={s}
+                  className={sim.speed === s ? 'active' : ''}
+                  aria-pressed={sim.speed === s}
+                  onClick={() => sim.setSpeed(s)}
+                >
+                  {s}x
+                </button>
+              ))}
+            </span>
+          </>
+        )}
         <span className="tl-pos">
-          {pos === 0
-            ? trace && !trace.periodic && n === 0
-              ? 'stuck from the start: no actor can fire'
-              : 'initial state'
-            : `step ${pos}/${n}: ${stepText(trace!.steps[pos - 1]!)}${
-                !trace!.periodic && pos === n ? ' (stuck from here)' : ''
-              }`}
+          {!trace
+            ? 'nothing to play: no schedule and no run to replay'
+            : pos === 0
+              ? !trace.periodic && n === 0
+                ? 'stuck from the start: no actor can fire'
+                : 'initial state'
+              : `step ${pos}/${n}: ${stepText(trace!.steps[pos - 1]!)}${
+                  !trace!.periodic && pos === n ? ' (stuck from here)' : ''
+                }`}
         </span>
         <span className="tl-spacer" />
-        {sched && (
+        {facts && trace && (
           <button
             className={tables ? 'active' : ''}
             aria-pressed={tables}
-            title="Repetitions and buffer sizes"
+            title="Topology matrix, balance equations, repetition vector, schedule and buffers"
             onClick={() => setTables((v) => !v)}
           >
-            tables
+            analysis
           </button>
         )}
         <button aria-label="collapse" title="Collapse to a summary" onClick={onToggle}>
@@ -177,7 +171,7 @@ export function Timeline({
       {trace && (
         <div className="tl-scroll">
           <div className="tl-row">
-            <span className="tl-name">{trace.periodic ? 'period' : 'stuck run'}</span>
+            <span className="tl-name">{trace.periodic ? 'iteration' : 'stuck run'}</span>
             <span className="tl-cells">
               {trace.steps.map((s, i) => (
                 <button
@@ -199,7 +193,10 @@ export function Timeline({
           </div>
           {occupancy(trace).map(([sig, values, max]) => (
             <div key={sig} className="tl-row" data-signal={sig}>
-              <span className="tl-name" title={`${sig} holds at most ${max} tokens in one period`}>
+              <span
+                className="tl-name"
+                title={`${sig} holds at most ${max} tokens in one iteration of this schedule`}
+              >
                 {sig} <b>{max}</b>
               </span>
               <Sparkline values={values} max={max} pos={pos} />
@@ -207,7 +204,7 @@ export function Timeline({
           ))}
         </div>
       )}
-      {tables && sched && <Tables sched={sched} />}
+      {tables && facts && <Analysis facts={facts} sched={sched} times={times} onJump={onJump} />}
     </div>
   );
 }

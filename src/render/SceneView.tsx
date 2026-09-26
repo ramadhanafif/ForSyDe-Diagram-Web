@@ -39,6 +39,10 @@ export interface SceneViewProps {
   flash: string[];
   /** Increment to request a fit-to-view. */
   fitRequest: number;
+  /** Highest zoom a fit may reach; presenting lets a small model fill the screen. */
+  fitMax?: number;
+  /** Lowest zoom a fit may reach; a phone pans rather than shrink labels to dust. */
+  fitMin?: number;
   /** Polled after each scene change; true when a fit is pending (example load). */
   /** True once, when a fit is pending for the model with this source (example load, open). */
   consumePendingFit(source: string): boolean;
@@ -94,8 +98,8 @@ function targetOf(t: EventTarget | null, model: SceneModel | null): Target | nul
   if (port) return portTarget(port.getAttribute('data-port-id'));
   const label = t.closest('[data-label-id]');
   const kind = label?.getAttribute('data-label-kind');
-  if (label && kind === 'rate') {
-    const owner = label.getAttribute('data-label-id')!.replace(/#rate$/, '');
+  if (label && (kind === 'rate' || kind === 'index')) {
+    const owner = label.getAttribute('data-label-id')!.replace(/#(rate|index)$/, '');
     // a rate at an io pill belongs to the pill's signal
     return portTarget(owner) ?? { kind: 'edge', signal: owner };
   }
@@ -277,7 +281,7 @@ function anchorOf(scene: Scene, hit: Hit): Pt | null {
  * editing itself happens in App.
  */
 export function SceneView(p: SceneViewProps) {
-  const { pane: wrap, view, bind, fit, zoomBy } = usePanZoom(isBackground);
+  const { pane: wrap, view, bind, fit, zoomBy } = usePanZoom(isBackground, p.fitMax, p.fitMin);
   const [selected, setSelected] = useState<Hit | null>(null);
   const [hover, setHover] = useState<Hit | null>(null);
   const [editingState, setEditing] = useState<Editing | null>(null);

@@ -126,10 +126,23 @@ export const SceneLabels = memo(function SceneLabels({ model, style, flags }: Pr
           <div
             {...common}
             data-owner-edge={l.owner}
-            title={`buffer: ${sig} holds at most ${n} token${plural(n)} during one schedule iteration`}
+            title={`buffer: ${sig} holds at most ${n} token${plural(n)} during one iteration of this schedule (the first ready actor fires, in declaration order)`}
           >
             {/* the modern style draws a FIFO strip in the SVG layer under this box */}
             {style === 'lecture' ? `·${n}` : null}
+          </div>
+        );
+      }
+      case 'index': {
+        const port = ports.get(l.owner);
+        const what = port?.dir === 'out' ? 'result' : 'argument';
+        return (
+          <div
+            {...common}
+            data-owner-edge={edgeAt.get(l.owner) ?? ''}
+            title={`${what} ${l.text.slice(1)} of ${port?.node ?? ''}: ports on this side are drawn out of order to avoid a crossing`}
+          >
+            {l.text}
           </div>
         );
       }
@@ -143,8 +156,14 @@ export const SceneLabels = memo(function SceneLabels({ model, style, flags }: Pr
         const title = out
           ? `production rate: ${proc} writes ${r} token${plural(r)} onto ${sig} per firing`
           : `consumption rate: ${proc} reads ${r} token${plural(r)} from ${sig} per firing`;
+        // a rate of 1 completes the balance equation but is the default: drawn quietly
         return (
-          <div {...common} data-owner-edge={edge} title={title}>
+          <div
+            {...common}
+            className={r === 1 ? `${common.className} label-unit` : common.className}
+            data-owner-edge={edge}
+            title={title}
+          >
             {l.text}
           </div>
         );

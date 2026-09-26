@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { applySplices } from '../src/core/edits';
 import { elaborate } from '../src/core/elaborate';
+import { editValue, inlineEdit } from '../src/core/inlineEdit';
 import type { IRSystem } from '../src/core/ir';
+import { sourceSpans } from '../src/core/links';
 import { parse } from '../src/core/parser';
 import { computeScheduleAndBuffers, type ScheduleResult } from '../src/core/schedule';
 import { layout } from '../src/layout';
@@ -196,30 +199,69 @@ describe('layout', () => {
     expect(measure('buf 3', 'signal')).toEqual(estimateMeasureFor('lecture')('buf 3', 'signal'));
   });
 
-  it('orders ports by argument and result index, top to bottom', () => {
-    // a_b takes a_a's results swapped, so the edges must cross rather than
-    // the ports trade places
-    const m = model(
-      [
-        'system :: Signal Int -> Signal Int',
-        'system s_in = s_out',
-        '  where',
-        '    (s_1, s_2) = a_a s_in',
-        '    s_out = a_b s_2 s_1',
-      ],
-      [actor('a_a', 1, 2), actor('a_b', 2, 1)],
+  it('reorders ports to save a crossing, tags them, and edits still hit the argument', () => {
+    // a_b takes a_a's results swapped: one side trades its ports rather than
+    // the edges crossing. Distinct rates show which argument a port is.
+    const src = [
+      'module T where',
+      'import ForSyDe.Shallow',
+      'system :: Signal Int -> Signal Int',
+      'system s_in = s_out',
+      '  where',
+      '    (s_1, s_2) = a_a s_in',
+      '    s_out = a_b s_2 s_1',
+      'a_a :: Signal Int -> (Signal Int, Signal Int)',
+      'a_a x = actor12SDF 1 (2, 3) f x',
+      'a_b :: Signal Int -> Signal Int -> Signal Int',
+      'a_b x y = actor21SDF (3, 2) 1 g x y',
+    ].join('\n');
+    const m = compile(src);
+    for (const scene of expectClean(m)) {
+      expect(scoreScene(scene).crossings).toBe(0);
+      // a side is reordered when its ports, top to bottom, are not in index order
+      const reordered = scene.nodes.flatMap((n) =>
+        (['in', 'out'] as const).flatMap((dir) => {
+          const ps = n.ports.filter((p) => p.dir === dir).sort((p, q) => p.at.y - q.at.y);
+          return ps.some((p, i) => p.index !== i) ? [ps] : [];
+        }),
+      );
+      expect(reordered).toHaveLength(1);
+      const side = reordered[0]!;
+      const tags = scene.labels.filter((l) => l.kind === 'index');
+      expect(tags.map((l) => [l.owner, l.text]).sort()).toEqual(
+        side.map((p) => [p.id, `#${p.index + 1}`]).sort(),
+      );
+      // the top port is argument 2: links and inline edit reach that rate
+      const top = side[0]!;
+      expect(top.index).toBe(1);
+      const t = { kind: 'rate' as const, node: top.node, dir: top.dir, index: top.index };
+      const [span] = sourceSpans(m.ir, src, t);
+      expect(src.slice(span!.from, span!.to)).toBe(String(top.rate));
+      expect(editValue(m.ir, t)).toBe(String(top.rate));
+      const edited = inlineEdit(m.ir, src, t, '7');
+      if (typeof edited === 'string') throw new Error(edited);
+      const again = compile(applySplices(src, edited)).ir;
+      const sig = again.signals.find((x) => x.name === top.signal)!;
+      expect(top.dir === 'in' ? sig.target.rate : sig.source.rate).toBe(7);
+    }
+  });
+
+  it('puts the system output of 002 rightmost with no crossing', () => {
+    // s_4 loops back through d_1 to a_c; s_out leaves a_d from the top port so
+    // it passes above the loop to a column of its own
+    const m = compile(
+      readFileSync(new URL('../fixtures/SDF_example_002.hs', import.meta.url), 'utf8'),
     );
     for (const scene of expectClean(m)) {
-      const ys = (id: string, dir: string) =>
-        node(scene, id)
-          .ports.filter((p) => p.dir === dir)
-          .sort((a, b) => a.index - b.index)
-          .map((p) => [p.signal, p.at.y] as const);
-      const [o1, o2] = ys('a_a', 'out');
-      const [i1, i2] = ys('a_b', 'in');
-      expect([o1![0], o2![0], i1![0], i2![0]]).toEqual(['s_1', 's_2', 's_2', 's_1']);
-      expect(o1![1]).toBeLessThan(o2![1]);
-      expect(i1![1]).toBeLessThan(i2![1]);
+      expect(scoreScene(scene).crossings).toBe(0);
+      const out = node(scene, 's_out');
+      for (const n of scene.nodes) if (n !== out) expect(n.box.x + n.box.w).toBeLessThan(out.box.x);
+      for (const e of scene.edges)
+        if (e.feedback) for (const p of e.points) expect(p.x).toBeLessThan(out.box.x);
+      const ys = node(scene, 'a_d')
+        .ports.filter((p) => p.dir === 'out')
+        .sort((p, q) => p.at.y - q.at.y);
+      expect(ys.map((p) => p.signal)).toEqual(['s_out', 's_4']);
     }
   });
 

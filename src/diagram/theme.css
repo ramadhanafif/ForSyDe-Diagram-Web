@@ -61,6 +61,12 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  /* phones: the height left once the browser's bars are shown */
+  height: 100dvh;
+}
+
+.tabs {
+  display: none;
 }
 
 .toolbar {
@@ -307,7 +313,13 @@ body {
   color: var(--accent);
 }
 
-.label-buffer {
+/* rates equal to 1: shown so each balance equation has both sides, but quiet */
+.label-rate.label-unit {
+  opacity: 0.5;
+}
+
+.label-buffer,
+.label-index {
   color: var(--fg-dim);
 }
 
@@ -442,9 +454,9 @@ body {
  * semantic zoom: zoomed out, fine print is unreadable, so it goes (the hover
  * card lists it). visibility keeps every box where the layout put it.
  */
-.scene-viewport.lod-mid :is(.label-rate, .label-buffer, .label-stack, .label-badge),
+.scene-viewport.lod-mid :is(.label-rate, .label-index, .label-buffer, .label-stack, .label-badge),
 .scene-viewport.lod-mid .buffer-strip,
-.scene-viewport.lod-far :is(.label-rate, .label-buffer, .label-stack, .label-badge),
+.scene-viewport.lod-far :is(.label-rate, .label-index, .label-buffer, .label-stack, .label-badge),
 .scene-viewport.lod-far :is(.label-signal, .buffer-strip, .scene-port) {
   visibility: hidden;
 }
@@ -688,6 +700,26 @@ body {
   color: var(--accent);
 }
 
+/* folds and unfolds the toggles: needed in the first minutes, then rarely */
+.float-controls button.switch-title {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  color: var(--fg-dim);
+}
+
+.float-controls:not(.open) .switch-group {
+  display: none;
+}
+
+/* the legend opens from the same corner, under the buttons, never over them */
+.float-controls .legend {
+  position: static;
+}
+
+.float-controls {
+  align-items: flex-start;
+}
+
 /* legend card */
 .legend {
   position: absolute;
@@ -769,6 +801,29 @@ body {
   color: var(--buffer-fg);
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* a tour step where tokens move: a light overlay, so they are seen */
+body.tour-lift .driver-overlay {
+  opacity: 0.3;
+}
+
+/* presenting: the diagram alone, the toolbar down to what a lecture needs */
+.app.presenting .panes {
+  grid-template-columns: 1fr;
+}
+
+.app.presenting .editor-pane,
+.app.presenting .splitter,
+.app.presenting .float-controls,
+.app.presenting .legend,
+.app.presenting .toolbar-items > :not(.keep) {
+  display: none;
+}
+
+/* the lecture-notes buffer size in full ink: grey read as a minus from the back row */
+.diagram-lecture .label-buffer {
+  color: var(--fg);
 }
 
 /* lecture style keeps the terse black notation, so the legend follows */
@@ -1163,31 +1218,108 @@ body {
   color: var(--accent);
 }
 
-.schedule-tables {
+.analysis {
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 8px 28px;
   align-items: flex-start;
 }
 
-.schedule-tables table {
-  border-collapse: collapse;
-}
-
-.schedule-tables th {
-  text-align: left;
+.analysis h4 {
+  margin: 0 0 3px;
   color: var(--fg-dim);
+  font-size: 11px;
   font-weight: 600;
-  padding: 1px 12px 1px 0;
 }
 
-.schedule-tables td {
-  padding: 1px 12px 1px 0;
+.analysis p {
+  margin: 3px 0 6px;
+}
+
+.analysis table {
+  border-collapse: collapse;
   font-family: ui-monospace, monospace;
 }
 
+.analysis th,
+.analysis td {
+  padding: 1px 8px 1px 0;
+  text-align: right;
+}
+
+.analysis thead th {
+  color: var(--fg-dim);
+  font-weight: 600;
+}
+
+.analysis tbody th {
+  text-align: left;
+  font-weight: normal;
+}
+
+.analysis .an-note {
+  max-width: 220px;
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
+.an-gantt text {
+  fill: var(--fg-dim);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.an-gantt rect {
+  fill: var(--accent);
+  opacity: 0.8;
+}
+
+.an-gantt .an-iter {
+  stroke: var(--fg-dim);
+  stroke-dasharray: 2 2;
+}
+
+.analysis .an-zero {
+  color: var(--fg-dim);
+  opacity: 0.5;
+}
+
+.analysis .an-bad,
+.analysis .an-bad .an-sig,
+.analysis .an-fail {
+  color: var(--error);
+}
+
+.analysis .an-ok {
+  color: var(--accent);
+}
+
+.analysis ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analysis li {
+  padding: 1px 0;
+}
+
+.analysis code {
+  font-family: ui-monospace, monospace;
+}
+
+.timeline .an-sig {
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-family: ui-monospace, monospace;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
 /* overlays */
-.status-chip,
-.sched-banner {
+.status-chip {
   position: absolute;
   left: 12px;
   padding: 4px 10px;
@@ -1199,16 +1331,55 @@ body {
 
 .status-chip {
   top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   background: var(--warning);
   color: var(--bg);
 }
 
-/* wraps short of the zoom controls in the same corner */
+/* under the diagram, above the timeline: it never covers either */
+.dock {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 55%;
+  min-height: 0;
+}
+
+.dock > .timeline {
+  max-height: none;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+/* the collapsed timeline floats over the diagram's bottom-left corner */
+.dock > .schedule-chip {
+  bottom: calc(100% + 12px);
+}
+
 .sched-banner {
-  bottom: 12px;
-  max-width: calc(100% - 64px);
+  flex: none;
+  padding: 6px 12px;
   background: var(--error);
   color: #fff;
+  font-size: 12px;
+}
+
+.sched-fix {
+  margin-top: 6px;
+  padding: 3px 10px;
+  border: 1px solid #fff;
+  border-radius: 4px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sched-fix:hover {
+  background: rgb(255 255 255 / 0.15);
 }
 
 .empty-canvas {
@@ -1328,6 +1499,27 @@ body {
   color: var(--accent);
 }
 
+.popover .pop-facts {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.popover .pop-facts code {
+  display: block;
+  color: var(--fg);
+  font-family: ui-monospace, monospace;
+}
+
+.popover .pop-note {
+  margin-top: 4px;
+  color: var(--error);
+  font-size: 11px;
+}
+
 .popover .err {
   color: var(--error);
 }
@@ -1391,4 +1583,114 @@ body {
 
 [data-theme='dark'] .cm-editor .cm-selectionBackground {
   background: rgba(68, 147, 248, 0.25);
+}
+
+/* ------------------------------------------------------------------ */
+/* phones (App.tsx COMPACT_QUERY): one pane at a time, the toolbar in  */
+/* one scrolling row, the SHOW panel folded, the popover a bottom sheet */
+
+@media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+  .toolbar {
+    flex-wrap: nowrap;
+    padding: 4px 8px;
+  }
+
+  .brand,
+  .version {
+    display: none;
+  }
+
+  .toolbar-items {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .toolbar-items > * {
+    flex: none;
+  }
+
+  /* what a phone reaches for first, before the row scrolls */
+  .toolbar-items select,
+  .toolbar-items .animate-button {
+    order: -1;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+
+  .tabs button {
+    flex: 1;
+    min-height: 36px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--fg-dim);
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .tabs button[aria-selected='true'] {
+    border-bottom-color: var(--accent);
+    color: var(--fg);
+  }
+
+  .tab-errors {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--error);
+    color: #fff;
+    font-size: 11px;
+  }
+
+  /* one column; the stored split ratio does not apply */
+  .panes {
+    grid-template-columns: 1fr;
+  }
+
+  .splitter,
+  .app.tab-diagram .editor-pane,
+  .app.tab-code .diagram-pane {
+    display: none;
+  }
+
+  .popover {
+    position: fixed;
+    left: 0 !important;
+    right: 0;
+    top: auto !important;
+    bottom: 0;
+    max-height: 60dvh;
+    overflow: auto;
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* what the actor means comes before the fields to edit it */
+  .popover .pop-facts {
+    order: -1;
+    margin: 0 0 6px;
+    padding: 0 0 6px;
+    border-top: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dock {
+    max-height: 45%;
+  }
+}
+
+/* fingers, not a mouse pointer */
+@media (pointer: coarse) {
+  .toolbar button,
+  .toolbar select,
+  .toolbar summary,
+  .timeline .tl-bar button,
+  .float-controls button {
+    min-height: 36px;
+    min-width: 36px;
+  }
 }

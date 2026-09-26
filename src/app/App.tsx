@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
 import {
   addInput,
@@ -31,10 +32,13 @@ import {
 } from './storage';
 import { Toolbar, type ExportKind } from './Toolbar';
 import { Timeline } from './Timeline';
+import { analyze } from '../core/analysis';
+import { parseTimes } from '../sim/timed';
 import { scheduleWarning } from './scheduleWarning';
+import { explain } from './explain';
 import { download, sceneToSvg, svgToPngBlob } from '../export/svg';
 import { sceneToTikz, tikzPicture } from '../export/tikz';
-import { startTour, TOUR_SEEN_KEY } from './tour';
+import { startLearn, startTour, TOUR_SEEN_KEY } from './tour';
 import { useScene, type SceneModel } from './useScene';
 import { BLANK_MODEL, exportFileName } from './files';
 import {
@@ -48,7 +52,7 @@ import { pinScene } from '../layout/pin';
 import { linkedAt, sourceSpans, type Target } from '../core/links';
 import { inlineEdit, type EditTarget } from '../core/inlineEdit';
 import { edgeId as edgeIdOf } from '../scene/labels';
-import { fillAt, simMarks, stuckLine, useSimulation } from './useSimulation';
+import { fillAt, simMarks, useSimulation } from './useSimulation';
 
 /** Per-annotation visibility, driven by the floating SHOW toggles in the pane. */
 type ShowFlags = Omit<LabelFlags, 'unitRates'>;
@@ -144,8 +148,8 @@ function Legend({ style }: { style: DiagramStyle }) {
         )}
         <span>
           {modern
-            ? 'buffer: one slot per token it must hold, filled slots hold tokens now'
-            : 'buffer: maximum tokens held on the signal'}
+            ? 'buffer: one slot per token it holds at most under this schedule, filled slots hold tokens now'
+            : 'buffer: maximum tokens held on the signal under this schedule'}
         </span>
       </div>
       <div className="legend-row">
@@ -202,7 +206,25 @@ function componentCount(ir: IRSystem): number {
   return new Set(nodes.map(find)).size;
 }
 
+/** Phones, portrait or landscape: one pane at a time. theme.css has the same query. */
+const COMPACT_QUERY = '(max-width: 700px), (max-height: 500px) and (pointer: coarse)';
+/** On a phone a fit stops here: 10 px labels stay at 9 px and the view pans instead. */
+const COMPACT_FIT_MIN = 0.9;
+
+function useMedia(query: string): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      const m = window.matchMedia(query);
+      m.addEventListener('change', changed);
+      return () => m.removeEventListener('change', changed);
+    },
+    () => window.matchMedia(query).matches,
+  );
+}
+
 const NOTICE_TIMEOUT_MS = 5000;
+/** Presenting, a fit may zoom this far: 10 px labels read at 30 px on a small model. */
+const PRESENT_FIT_MAX = 3;
 const FLASH_TIMEOUT_MS = 1800;
 
 /** Keystroke quiet period before the editor text is written to localStorage. */
@@ -282,13 +304,19 @@ export function App() {
   const queueRenames = useCallback((pairs: [string, string][]) => {
     if (pairs.length) setRenames((r) => [...r, ...pairs]);
   }, []);
-  const [showUnitRates, setShowUnitRates] = useState(false);
+  const [showUnitRates, setShowUnitRates] = useState(true);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(true);
   const [showFlags, setShowFlags] = useState<ShowFlags>(() =>
     storageGetJson('showFlags', DEFAULT_FLAGS),
   );
   const [legendOpen, setLegendOpen] = useState(false);
+  const [presenting, setPresenting] = useState(false);
+  const compact = useMedia(COMPACT_QUERY);
+  // on a phone one pane shows at a time; the diagram first
+  const [tab, setTab] = useState<'code' | 'diagram'>('diagram');
+  const [showOpen, setShowOpen] = useState(() => storageGet('showOpen') === '1');
+  useEffect(() => storageSet('showOpen', showOpen ? '1' : '0'), [showOpen]);
   useEffect(() => storageSet('showFlags', JSON.stringify(showFlags)), [showFlags]);
 
   // transient toast for refused gestures, optionally with an undo action
@@ -328,26 +356,27 @@ export function App() {
     [model, shownPositions],
   );
   const parts = useMemo(() => (model ? componentCount(model.ir) : 0), [model]);
-  // why there is no schedule; the rank error on a disconnected graph teaches the wrong concept
-  let schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
-  if (
-    schedError &&
-    pipe.schedule &&
-    !pipe.schedule.ok &&
-    pipe.schedule.kind === 'rank' &&
-    parts > 1
-  )
-    schedError = `the graph has ${parts} disconnected parts; every process must be connected to the rest of the system before a schedule exists`;
+  const facts = useMemo(() => (model ? analyze(model.ir) : null), [model]);
+  const times = useMemo(() => parseTimes(model?.source ?? ''), [model]);
+  const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
+  const { trace, stuck, pos } = sim;
+  // why there is no schedule, in the model's names, with a checked fix when one exists
+  const explanation = useMemo(
+    () =>
+      model && !model.schedule.ok
+        ? explain(model.source, model.ir, model.schedule, facts, stuck, parts)
+        : null,
+    [model, facts, stuck, parts],
+  );
+  const schedError = explanation?.message ?? null;
   // the failure also lists with the editor's problems, as a warning on the text as it is
   const diagnostics = useMemo(
     () =>
-      schedError && model && model.source === source
-        ? [...pipe.diagnostics, scheduleWarning(model.ir, schedError)]
+      explanation && model?.source === source
+        ? [...pipe.diagnostics, scheduleWarning(explanation)]
         : pipe.diagnostics,
-    [schedError, model, source, pipe.diagnostics],
+    [explanation, model, source, pipe.diagnostics],
   );
-  const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
-  const { trace, stuck, pos } = sim;
   const marks = useMemo(
     () => (model ? simMarks(model, { trace: showSchedule ? trace : null, stuck, pos }) : undefined),
     [model, trace, stuck, pos, showSchedule],
@@ -425,7 +454,18 @@ export function App() {
   useEffect(() => {
     animateRef.current = startAnimation;
   });
-  const tourHooks = useMemo(() => ({ animate: () => animateRef.current() }), []);
+  const tourHooks = useMemo(
+    () => ({
+      animate: () => animateRef.current(),
+      // synchronously, so the tour measures the pane after it is shown
+      tab: (t: 'code' | 'diagram') => {
+        flushSync(() => setTab(t));
+        if (t === 'diagram') setFitRequest((n) => n + 1);
+      },
+      compact,
+    }),
+    [compact],
+  );
   const { stepSeq, stepMs } = sim;
   const travel = useMemo<Travel | null>(
     () =>
@@ -590,6 +630,24 @@ export function App() {
     [replaceDoc],
   );
 
+  // the Learn SDF walk loads lessons itself and waits for their diagrams
+  const learnHooks = {
+    load: async (name: string) => {
+      const ex = examples.find((e) => e.name === name);
+      if (!ex) return false;
+      if (
+        modelRef.current?.source !== ex.source &&
+        !replaceDoc(ex.source, name, new Map(), 'load this lesson')
+      )
+        return false;
+      for (let i = 0; i < 60 && modelRef.current?.source !== ex.source; i++)
+        await new Promise((r) => setTimeout(r, 50));
+      setTab('diagram');
+      return modelRef.current?.source === ex.source;
+    },
+    animate: () => animateRef.current(),
+  };
+
   const onNew = () => replaceDoc(BLANK_MODEL, '', new Map(), 'start a new model');
 
   const onOpen = (file: File) => {
@@ -739,6 +797,16 @@ export function App() {
     },
     [model, view, diagramTheme, onExportHs],
   );
+
+  const onFix = () => {
+    const fix = explanation?.fix;
+    if (!fix || !model) return;
+    if (editorRef.current?.getDoc() !== model.source) {
+      setNotice({ text: 'diagram is stale, try again once it updates' });
+      return;
+    }
+    editorRef.current.applySplices(fix.splices);
+  };
 
   const onAddDelay = () => {
     setNotice({ text: 'a delay needs a signal: drag the delay chip onto an edge' });
@@ -895,8 +963,45 @@ export function App() {
     [paneCoords],
   );
 
+  const togglePresent = () => {
+    setPresenting((v) => !v);
+    setTab('diagram'); // a phone on the Code tab would present nothing
+    // Space plays from here on: the Present button must not keep focus and click again
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    setPopover(null);
+    setMenu(null);
+    setFitRequest((n) => n + 1); // the pane changes size
+  };
+  // presenting: Space plays, the arrow keys step, Esc leaves; P toggles anywhere
+  // outside a text field. Captured, so a focused node does not also nudge.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target instanceof Element ? e.target : null;
+      if (t?.closest('.cm-editor, input, textarea, select, [contenteditable]')) return;
+      const act =
+        e.key === 'p' || e.key === 'P' || (presenting && e.key === 'Escape')
+          ? togglePresent
+          : !presenting
+            ? null
+            : e.key === ' '
+              ? onAnimate
+              : e.key === 'ArrowRight'
+                ? () => sim.step(1)
+                : e.key === 'ArrowLeft'
+                  ? () => sim.step(-1)
+                  : null;
+      if (!act) return;
+      e.preventDefault();
+      e.stopPropagation();
+      act();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
   return (
-    <div className="app">
+    <div className={`app tab-${tab}${presenting ? ' presenting' : ''}`}>
       <Toolbar
         example={example}
         onExample={loadExample}
@@ -910,6 +1015,7 @@ export function App() {
         onOpen={onOpen}
         onTidy={onTidy}
         onTour={() => void startTour(() => storageSet(TOUR_SEEN_KEY, '1'), tourHooks)}
+        onLearn={() => void startLearn(learnHooks)}
         animating={sim.playing}
         canAnimate={!!model}
         animateBlocked={nothingToRun}
@@ -917,7 +1023,31 @@ export function App() {
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
         onToggleAppTheme={() => setAppTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        presenting={presenting}
+        onPresent={togglePresent}
       />
+      <nav className="tabs" role="tablist">
+        {(['code', 'diagram'] as const).map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => {
+              setTab(t);
+              setPopover(null);
+              setMenu(null);
+              if (t === 'diagram') setFitRequest((n) => n + 1); // it measured 0x0 while hidden
+            }}
+          >
+            {t === 'code' ? 'Code' : 'Diagram'}
+            {t === 'code' && diagnostics.some((d) => d.severity === 'error') && (
+              <span className="tab-errors" aria-label="has errors">
+                !
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
       <main className="panes" ref={panesRef} style={{ ['--split' as string]: splitRatio }}>
         <section className="pane editor-pane">
           <ErrorBar
@@ -957,6 +1087,8 @@ export function App() {
             travel={travel}
             flash={flash}
             fitRequest={fitRequest}
+            fitMax={presenting ? PRESENT_FIT_MAX : undefined}
+            fitMin={compact ? COMPACT_FIT_MIN : undefined}
             consumePendingFit={consumePendingFit}
             onNodeClick={(id, cx, cy) => {
               if (!model?.ir.processes.some((q) => q.name === id)) return;
@@ -975,9 +1107,15 @@ export function App() {
             onDropInsert={onDropInsert}
             onConnect={onConnect}
           />
-          <div className="float-controls">
+          <div className={`float-controls${showOpen ? ' open' : ''}`}>
             <span className="detail-switch" title="Toggle each annotation on the diagram">
-              <span className="switch-title">show</span>
+              <button
+                className="switch-title"
+                aria-expanded={showOpen}
+                onClick={() => setShowOpen((v) => !v)}
+              >
+                show {showOpen ? '▾' : '▸'}
+              </button>
               {FLAG_LABELS.map(([key, label]) => (
                 <span key={key} className="switch-group">
                   <button
@@ -1006,8 +1144,8 @@ export function App() {
             >
               legend
             </button>
+            {legendOpen && <Legend style={diagramTheme} />}
           </div>
-          {legendOpen && <Legend style={diagramTheme} />}
           {popover && model && (
             <EditPopover
               target={popover.target}
@@ -1024,6 +1162,9 @@ export function App() {
                 if (mid) setHints((h) => new Map(h).set(proc, mid));
               }}
               onRenamed={(from, to) => setRenames((r) => [...r, [from, to]])}
+              notes={marks?.notes.get(
+                popover.target.kind === 'node' ? popover.target.name : popover.target.edgeId,
+              )}
             />
           )}
           {menu && model && (
@@ -1049,26 +1190,40 @@ export function App() {
               Showing last valid diagram: {pipe.errorCount} error{pipe.errorCount === 1 ? '' : 's'}
             </div>
           )}
-          {schedError && (
-            <div className="sched-banner">
-              <div>Not schedulable: {schedError}</div>
-              {stuckLine(stuck) && <div className="sched-detail">{stuckLine(stuck)}</div>}
-            </div>
-          )}
           {notice && (
             <div className="notice-toast">
               {notice.text}
               {notice.undo && <button onClick={notice.undo}>Undo</button>}
             </div>
           )}
-          {showSchedule && trace && (
-            <Timeline
-              sched={pipe.schedule?.ok ? pipe.schedule : null}
-              sim={sim}
-              open={scheduleOpen}
-              onToggle={() => setScheduleOpen((v) => !v)}
-            />
-          )}
+          <div className="dock">
+            {explanation && (
+              <div className="sched-banner" role="alert">
+                <div>Not schedulable: {explanation.message}</div>
+                {explanation.lines.map((l) => (
+                  <div key={l} className="sched-detail">
+                    {l}
+                  </div>
+                ))}
+                {explanation.fix && (
+                  <button className="sched-fix" onClick={onFix}>
+                    {explanation.fix.label}
+                  </button>
+                )}
+              </div>
+            )}
+            {showSchedule && (trace || facts) && (
+              <Timeline
+                sched={pipe.schedule?.ok ? pipe.schedule : null}
+                facts={facts}
+                times={times}
+                onJump={onJump}
+                sim={sim}
+                open={scheduleOpen}
+                onToggle={() => setScheduleOpen((v) => !v)}
+              />
+            )}
+          </div>
         </section>
       </main>
     </div>

@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { analyze, balanceEquation, channelOf, processFacts } from '../core/analysis';
 import {
   deleteProcess,
   insertOnEdge,
@@ -32,6 +33,8 @@ interface Props {
   onInserted?(proc: string): void;
   /** A process or signal is being renamed; the layout carries its position. */
   onRenamed?(oldId: string, newId: string): void;
+  /** What the run shows about the target, such as what a stuck actor waits for. */
+  notes?: string[];
 }
 
 export function EditPopover({
@@ -43,6 +46,7 @@ export function EditPopover({
   onClose,
   onInserted,
   onRenamed,
+  notes,
 }: Props) {
   const [error, setError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -118,7 +122,52 @@ export function EditPopover({
       }}
     >
       {body}
+      <Facts target={target} model={model} />
+      {notes?.map((n) => (
+        <div key={n} className="pop-note">
+          {n}
+        </div>
+      ))}
       {error && <div className="err">{error}</div>}
+    </div>
+  );
+}
+
+/** The SDF meaning of the target: firings, rates and balance equations with numbers. */
+function Facts({ target, model }: { target: PopoverTarget; model: SceneModel }) {
+  const facts = useMemo(() => analyze(model.ir), [model]);
+  if (!facts) return null;
+  let rows: { text: string; eq?: string }[];
+  if (target.kind === 'node') rows = processFacts(facts, target.name);
+  else {
+    const sig = model.edgeSignals.get(target.edgeId);
+    const c = sig && channelOf(facts, sig.name, sig.source.name);
+    // a delay folds its two signals into one buffer, named after the input signal
+    const sched = model.schedule.ok ? model.schedule : null;
+    const key = sig && (sched?.aliases.get(sig.name) ?? sig.name);
+    const buffer = sched?.buffers.find(([n]) => n === key)?.[1];
+    rows = c
+      ? [
+          {
+            text: `${c.src} writes ${c.prod}, ${c.dst} reads ${c.cons} per firing`,
+            eq: balanceEquation(c, facts.q),
+          },
+        ]
+      : [];
+    if (buffer !== undefined)
+      rows.push({
+        text: `holds at most ${buffer} token${buffer === 1 ? '' : 's'} in this schedule`,
+      });
+  }
+  if (!rows.length) return null;
+  return (
+    <div className="pop-facts">
+      {rows.map((r) => (
+        <div key={r.text}>
+          {r.text}
+          {r.eq && <code>{r.eq}</code>}
+        </div>
+      ))}
     </div>
   );
 }

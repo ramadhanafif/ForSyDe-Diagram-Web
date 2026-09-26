@@ -131,8 +131,14 @@ function shapeOf(
   return { w, h, shape, attach };
 }
 
-/** Rate first next to the port, then the signal name and buffer reading left to right. */
-const ROW_RANK: Record<string, number> = { rate: 0, signal: 1, buffer: 2 };
+/**
+ * Order of a stub's labels outward from the node: the argument tag, the rate,
+ * then the signal name and buffer reading left to right.
+ */
+const ROW_RANK: Record<Side, Record<string, number>> = {
+  E: { index: 0, rate: 1, signal: 2, buffer: 3 },
+  W: { index: 0, rate: 1, buffer: 2, signal: 3 },
+};
 
 /**
  * Size a node and place its labels. `rows` holds the labels riding each
@@ -155,10 +161,8 @@ export function geometry(
   let right = w / 2;
   let left = w / 2;
   for (const [key, a] of attach) {
-    const row = [...(rows.get(key) ?? [])].sort((p, q) => {
-      const d = ROW_RANK[p.kind]! - ROW_RANK[q.kind]!;
-      return a.side === 'E' ? d : p.kind === 'rate' ? -1 : q.kind === 'rate' ? 1 : -d;
-    });
+    const rank = ROW_RANK[a.side];
+    const row = [...(rows.get(key) ?? [])].sort((p, q) => rank[p.kind]! - rank[q.kind]!);
     let x = w / 2 + LABEL_PAD;
     for (const l of row) {
       const m = measure(l.text, l.kind);

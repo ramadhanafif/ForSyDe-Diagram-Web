@@ -494,8 +494,8 @@ async function setStyle(page, style) {
   await settle(page);
 }
 
-const DEFAULT_SHOW = Object.fromEntries(FLAG_BUTTONS.map((l) => [l, l !== 'rates equal to 1']));
-const ALL_SHOW = Object.fromEntries(FLAG_BUTTONS.map((l) => [l, true]));
+const DEFAULT_SHOW = Object.fromEntries(FLAG_BUTTONS.map((l) => [l, true]));
+const NO_UNIT_SHOW = { ...DEFAULT_SHOW, 'rates equal to 1': false };
 
 const near = (a, b, tol = 2) => Math.abs(a - b) <= tol;
 
@@ -534,7 +534,7 @@ async function overlap(page, { url }) {
     await setStyle(page, style);
     for (const [flagName, flags] of [
       ['default', DEFAULT_SHOW],
-      ['all', ALL_SHOW],
+      ['no-unit-rates', NO_UNIT_SHOW],
     ]) {
       await setFlags(page, flags);
       for (const name of names) {
@@ -1071,6 +1071,89 @@ async function arrowKeys(page, { url }) {
   );
 }
 
+/** Present: P hides the editor and zooms in, Space plays, arrows step (never nudge), Esc leaves. */
+async function presentMode(page, { url }) {
+  await open(page, url);
+  await load(page, MODEL);
+  const k = () =>
+    page.eval(() => {
+      const m = /scale\(([\d.]+)\)/.exec(document.querySelector('.scene-viewport').style.transform);
+      return m ? Number(m[1]) : 0;
+    });
+  const k0 = await k();
+  const b0 = nodeBox(await scene(page), 'a_b');
+  // a focused node must not take the arrows as a nudge while presenting
+  await page.eval(() => document.querySelector('[data-node-id="a_b"]').focus());
+  await page.key('p');
+  await settle(page);
+  expect(await exists(page, '.app.presenting'), 'P did not start presenting');
+  expect(
+    await page.eval(
+      () => getComputedStyle(document.querySelector('.editor-pane')).display === 'none',
+    ),
+    'the editor is still shown',
+  );
+  await until(async () => (await k()) > k0 * 1.3, `a bigger fit than ${k0}`);
+  await page.key('ArrowRight');
+  await page.key('ArrowRight');
+  const at = await page.eval(() => document.querySelector('.tl-pos').textContent);
+  expect(/^step 2\//.test(at), `arrows stepped to '${at}'`);
+  const b1 = nodeBox(await scene(page), 'a_b');
+  expect(b1.x === b0.x && b1.y === b0.y, 'an arrow nudged the focused node');
+  await page.key(' ');
+  await waitFor(page, '.timeline [aria-label="pause"]', 'Space to start playing');
+  await page.key('Escape');
+  expect(!(await exists(page, '.app.presenting')), 'Esc did not leave present mode');
+  expect(!!(await doc(page)).length, 'the editor lost its text');
+  // a teacher clicks the button: Space must then play, not click the button again
+  await clickButton(page, '.toolbar', 'Present');
+  await page.key(' ');
+  await settle(page);
+  expect(await exists(page, '.app.presenting'), 'Space after the Present button left present mode');
+}
+
+/** A phone: one pane at a time behind tabs, labels no smaller than 9 px, SHOW folded. */
+async function phoneLayout(page, { url }) {
+  await page.viewport(390, 844);
+  await open(page, url);
+  await load(page, MODEL);
+  const shown = (sel) =>
+    page.eval((s) => {
+      const el = document.querySelector(s);
+      return (
+        !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0
+      );
+    }, sel);
+  expect(await shown('.tabs'), 'no pane tabs on a phone');
+  expect(!(await shown('.editor-pane')), 'the editor shows beside the diagram');
+  expect(await shown('.diagram-pane'), 'the diagram is not the first tab');
+  expect(!(await shown('.float-controls .switch-group')), 'the SHOW panel is unfolded');
+  await until(
+    () =>
+      page.eval(() => {
+        const m = /scale\(([\d.]+)\)/.exec(
+          document.querySelector('.scene-viewport').style.transform,
+        );
+        return !!m && Number(m[1]) >= 0.9;
+      }),
+    'a fit of at least 0.9 on a phone',
+  );
+  await clickButton(page, '.tabs', 'Code');
+  expect(await shown('.editor-pane'), 'the Code tab did not show the editor');
+  expect(!(await shown('.diagram-pane')), 'the diagram stayed beside the editor');
+  // the stored split ratio is not a phone's business: the editor takes the width
+  const w = await page.eval(
+    () => document.querySelector('.editor-pane').getBoundingClientRect().width,
+  );
+  expect(w > 380, `the editor is ${w} px wide on a 390 px phone`);
+  await clickButton(page, '.tabs', 'Diagram');
+  expect(await shown('.diagram-pane'), 'the Diagram tab did not come back');
+  // presenting from the Code tab shows the diagram, not a blank screen
+  await clickButton(page, '.tabs', 'Code');
+  await page.key('p');
+  expect(await shown('.diagram-pane'), 'presenting from the Code tab shows nothing');
+}
+
 /** A reload restores the text and the pinned layout from localStorage. */
 async function reloadRestores(page, { url }) {
   await open(page, url);
@@ -1528,6 +1611,24 @@ async function linkDiagramToEditor(page, { url }) {
   );
 }
 
+/** Typing a constructor prefix offers it; Enter writes it as a snippet with default rates. */
+async function editorCompletion(page, { url }) {
+  await open(page, url);
+  const src = 'module M where\n\na_1 s = ';
+  await page.eval((s) => window.__fsd.setSource(s), src);
+  await sleep(200);
+  await page.eval((o) => window.__fsd.setCursor(o), src.length);
+  await page.eval(() => document.querySelector('.cm-content').focus());
+  await page.type('actor21');
+  await waitFor(page, '.cm-tooltip-autocomplete', 'the completion list');
+  // CodeMirror ignores Enter for 75 ms after the list opens (interactionDelay)
+  await sleep(150);
+  await page.key('Enter');
+  await sleep(150);
+  const text = await doc(page);
+  expect(text === src + 'actor21SDF (1, 1) 1 f', `doc after completion: ${JSON.stringify(text)}`);
+}
+
 /** Double-click `selector`, replace the in-place input's text with `text`, then press `key`. */
 async function editInPlace(page, selector, text, key = 'Enter') {
   const at = await page.box(selector);
@@ -1742,6 +1843,19 @@ async function deadlockView(page, { url }) {
   );
 }
 
+/** The deadlock's one-click fix edits the text, and the model then has a schedule. */
+async function deadlockFix(page, { url }) {
+  await open(page, url);
+  await load(page, MODEL_DEADLOCK);
+  await waitFor(page, '.sched-fix', 'a fix button in the deadlock banner');
+  const label = await page.eval(() => document.querySelector('.sched-fix').textContent);
+  expect(label === 'Give d_d 2 initial tokens', `fix says '${label}'`);
+  await clickSelectorCenter(page, '.sched-fix');
+  await until(() => page.eval(() => !!window.__fsd.trace()?.periodic), 'a schedule after the fix');
+  expect(!(await exists(page, '.sched-banner')), 'the banner stayed after the fix');
+  expect(/delaySDF \[0,0\]/.test(await doc(page)), 'the delay did not get a second token');
+}
+
 async function inconsistentView(page, { url }) {
   await open(page, url);
   await load(page, MODEL_INCONSISTENT);
@@ -1751,12 +1865,17 @@ async function inconsistentView(page, { url }) {
       .qa('.scene-edge.unbounded')
       .map((el) => el.getAttribute('data-edge-id')),
     marker: !!document.querySelector('.scene-edge.unbounded .overflow-mark'),
-    line: document.querySelector('.sched-detail').textContent,
+    line: document.querySelector('.sched-banner').textContent,
     waiting: document.querySelectorAll('.scene-node.waiting').length,
   }));
   expect(sameSet(got.unbounded, ['e_s_da_d_d_a_a']), `unbounded signals [${got.unbounded}]`);
   expect(got.marker, 'no overflow marker on the unbounded signal');
-  expect(/accumulate on s_da every period/.test(got.line), `explanation says '${got.line}'`);
+  // one verdict, in the model's names: the loop and the ratio it demands, no deadlock
+  expect(
+    /inconsistent rates: around the loop .*q\(a_a\) = 2·q\(a_a\)/.test(got.line) &&
+      !/deadlock/i.test(got.line),
+    `explanation says '${got.line}'`,
+  );
   expect(got.waiting === 0, 'an inconsistent model marks waiting actors');
 }
 
@@ -2014,6 +2133,40 @@ async function animate(page, { url }) {
   await page.key('Escape');
 }
 
+/** Learn SDF walks the lessons, and every step points at something on screen. */
+async function learnSdf(page, { url }) {
+  await open(page, url);
+  await clickButton(page, '.toolbar', 'Learn SDF');
+  const titles = [
+    'Rates',
+    'Repetitions',
+    'Buffers',
+    'The same in matrix form',
+    'Deadlock',
+    'Inconsistent rates',
+  ];
+  for (const [i, want] of titles.entries()) {
+    await until(
+      () =>
+        page
+          .eval(() => document.querySelector('.driver-popover-title')?.textContent ?? '')
+          .then((t) => t === want),
+      `learn step ${i + 1} '${want}'`,
+      5000,
+    );
+    const pointed = await page.eval(() => {
+      const el = document.querySelector('.driver-active-element');
+      const r = el?.getBoundingClientRect();
+      return !!r && r.width + r.height > 0; // a straight edge has no height
+    });
+    expect(pointed, `learn step '${want}' points at nothing`);
+    const next = await page.box('.driver-popover-next-btn');
+    await page.click(next.x, next.y);
+  }
+  await until(async () => !(await exists(page, '.driver-popover')), 'the walk to end');
+  expect(/module Lesson06/.test(await doc(page)), 'the walk did not end on lesson 6');
+}
+
 async function reducedMotion(page, { url }) {
   await page.send('Emulation.setEmulatedMedia', {
     features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
@@ -2254,6 +2407,9 @@ export const scenarios = {
   nodeDrag,
   pinAndTidy,
   arrowKeys,
+  presentMode,
+  phoneLayout,
+  learnSdf,
   reloadRestores,
   hsRoundTrip,
   newModel,
@@ -2265,9 +2421,11 @@ export const scenarios = {
   noScheduleWarning,
   linkEditorToDiagram,
   linkDiagramToEditor,
+  editorCompletion,
   inlineEdit,
   semanticZoom,
   inconsistentView,
+  deadlockFix,
   layoutTween,
   enterExit,
   tokenTravel,
