@@ -71,10 +71,16 @@ export function Toolbar(p: ToolbarProps) {
           onChange={(e) => p.onExample(e.target.value)}
         >
           {p.example === '' && <option value="">untitled</option>}
-          {examples.map((ex) => (
-            <option key={ex.name} value={ex.name}>
-              {ex.name}
-            </option>
+          {(['Lessons', 'Test fixtures'] as const).map((group) => (
+            <optgroup key={group} label={group}>
+              {examples
+                .filter((ex) => ex.group === group)
+                .map((ex) => (
+                  <option key={ex.name} value={ex.name}>
+                    {ex.label}
+                  </option>
+                ))}
+            </optgroup>
           ))}
         </select>
         <button onClick={p.onFit}>Fit</button>
