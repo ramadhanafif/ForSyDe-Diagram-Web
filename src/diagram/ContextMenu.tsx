@@ -8,10 +8,23 @@ export type MenuTarget =
   | { kind: 'edge'; edgeId: string; signalName: string }
   | { kind: 'canvas' };
 
+export type MenuAction =
+  | 'add-actor'
+  | 'fit-view'
+  | 'insert-actor'
+  | 'insert-delay'
+  | 'rename-signal'
+  | 'rename'
+  | 'rates'
+  | 'function'
+  | 'tokens'
+  | 'goto-definition'
+  | 'delete';
+
 export interface MenuItem {
   label: string;
   /** Handled by App through the same staleness-guarded path as the EditPopover. */
-  action: string;
+  action: MenuAction;
   disabledReason?: string;
 }
 
@@ -67,7 +80,7 @@ interface MenuProps {
   x: number;
   y: number;
   items: MenuItem[];
-  onPick(action: string): void;
+  onPick(action: MenuAction): void;
   onClose(): void;
 }
 
