@@ -699,12 +699,24 @@ body {
   color: var(--accent);
 }
 
-/* a heading on a wide screen; on a phone it folds and unfolds the panel */
+/* folds and unfolds the toggles: needed in the first minutes, then rarely */
 .float-controls button.switch-title {
   padding: 4px 10px 2px;
   font-size: 10px;
   color: var(--fg-dim);
-  cursor: default;
+}
+
+.float-controls:not(.open) .switch-group {
+  display: none;
+}
+
+/* the legend opens from the same corner, under the buttons, never over them */
+.float-controls .legend {
+  position: static;
+}
+
+.float-controls {
+  align-items: flex-start;
 }
 
 /* legend card */
@@ -1297,6 +1309,8 @@ body {
 
 .status-chip {
   top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   background: var(--warning);
   color: var(--bg);
 }
@@ -1619,18 +1633,6 @@ body {
   .splitter,
   .app.tab-diagram .editor-pane,
   .app.tab-code .diagram-pane {
-    display: none;
-  }
-
-  .float-controls button.switch-title {
-    cursor: pointer;
-  }
-
-  .float-controls:not(.open) .switch-group {
-    display: none;
-  }
-
-  .float-controls:not(.open) > button {
     display: none;
   }
 

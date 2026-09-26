@@ -314,7 +314,8 @@ export function App() {
   const compact = useMedia(COMPACT_QUERY);
   // on a phone one pane shows at a time; the diagram first
   const [tab, setTab] = useState<'code' | 'diagram'>('diagram');
-  const [showOpen, setShowOpen] = useState(false);
+  const [showOpen, setShowOpen] = useState(() => storageGet('showOpen') === '1');
+  useEffect(() => storageSet('showOpen', showOpen ? '1' : '0'), [showOpen]);
   useEffect(() => storageSet('showFlags', JSON.stringify(showFlags)), [showFlags]);
 
   // transient toast for refused gestures, optionally with an undo action
@@ -1092,7 +1093,7 @@ export function App() {
                 aria-expanded={showOpen}
                 onClick={() => setShowOpen((v) => !v)}
               >
-                show
+                show {showOpen ? '▾' : '▸'}
               </button>
               {FLAG_LABELS.map(([key, label]) => (
                 <span key={key} className="switch-group">
@@ -1122,8 +1123,8 @@ export function App() {
             >
               legend
             </button>
+            {legendOpen && <Legend style={diagramTheme} />}
           </div>
-          {legendOpen && <Legend style={diagramTheme} />}
           {popover && model && (
             <EditPopover
               target={popover.target}
