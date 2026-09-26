@@ -17,7 +17,7 @@ import {
 } from '@codemirror/state';
 import { Decoration, drawSelection, EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { haskell } from '@codemirror/legacy-modes/mode/haskell';
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useEffectEvent, useImperativeHandle, useRef } from 'react';
 import type { Diagnostic } from '../core/ast';
 import type { Splice } from '../core/edits';
 import { editorHelp } from './help';
@@ -101,18 +101,17 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
 ) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const onCursorRef = useRef(onCursor);
-  onCursorRef.current = onCursor;
-
-  const darkRef = useRef(dark);
-  darkRef.current = dark;
+  // stable and reusable across setSource() states; set once the editor mounts
+  const baseExtensions = useRef<Extension[]>([]);
+  // the latest props, read from CodeMirror's callbacks without re-creating the editor
+  const changed = useEffectEvent((source: string) => onChange(source));
+  const cursorMoved = useEffectEvent((offset: number) => onCursor?.(offset));
+  const scheme = useEffectEvent(() => schemeCompartment.of(schemeExtension(dark)));
 
   useEffect(() => {
     // base extensions are stable and reusable across setSource() states;
     // the scheme compartment instance is created fresh per state instead
-    const baseExtensions = [
+    baseExtensions.current = [
       lineNumbers(),
       history(),
       keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap]),
@@ -123,9 +122,8 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
       editorHelp,
       lintGutter(),
       EditorView.updateListener.of((update) => {
-        if (update.docChanged) onChangeRef.current(update.state.doc.toString());
-        if (update.selectionSet || update.docChanged)
-          onCursorRef.current?.(update.state.selection.main.head);
+        if (update.docChanged) changed(update.state.doc.toString());
+        if (update.selectionSet || update.docChanged) cursorMoved(update.state.selection.main.head);
       }),
       linkedField,
       EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
@@ -133,15 +131,10 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
     const v = new EditorView({
       parent: host.current!,
       state: EditorState.create({
-        extensions: [
-          ...baseExtensions,
-          schemeCompartment.of(schemeExtension(darkRef.current)),
-          drawSelection({ cursorBlinkRate: 1200 }),
-        ],
+        extensions: [...baseExtensions.current, scheme(), drawSelection({ cursorBlinkRate: 1200 })],
       }),
     });
     view.current = v;
-    (v as EditorView & { fsdBaseExtensions?: unknown[] }).fsdBaseExtensions = baseExtensions;
     return () => v.destroy();
   }, []);
 
@@ -179,18 +172,17 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
       // fresh state so the example load is not part of the undo history;
       // base extensions (without the scheme compartment instance, which
       // cannot be reused across states) are rebuilt with the current theme
-      const stored = (v as EditorView & { fsdBaseExtensions?: unknown[] }).fsdBaseExtensions ?? [];
       v.setState(
         EditorState.create({
           doc: source,
           extensions: [
-            ...(stored as Extension[]),
-            schemeCompartment.of(schemeExtension(darkRef.current)),
+            ...baseExtensions.current,
+            scheme(),
             drawSelection({ cursorBlinkRate: 1200 }),
           ],
         }),
       );
-      onChangeRef.current(source);
+      changed(source);
     },
     applySplices(splices) {
       view.current?.dispatch({
