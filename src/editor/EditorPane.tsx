@@ -1,5 +1,10 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import {
+  bracketMatching,
+  HighlightStyle,
+  StreamLanguage,
+  syntaxHighlighting,
+} from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
@@ -15,6 +20,7 @@ import { haskell } from '@codemirror/legacy-modes/mode/haskell';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { Diagnostic } from '../core/ast';
 import type { Splice } from '../core/edits';
+import { editorHelp } from './help';
 
 /** Imperative editor API: the single write path for source text. */
 export interface EditorApi {
@@ -113,6 +119,8 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
       highlightSelectionMatches(),
       StreamLanguage.define(haskell),
       syntaxHighlighting(haskellHighlight),
+      bracketMatching(),
+      editorHelp,
       lintGutter(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChangeRef.current(update.state.doc.toString());

@@ -1611,6 +1611,24 @@ async function linkDiagramToEditor(page, { url }) {
   );
 }
 
+/** Typing a constructor prefix offers it; Enter writes it as a snippet with default rates. */
+async function editorCompletion(page, { url }) {
+  await open(page, url);
+  const src = 'module M where\n\na_1 s = ';
+  await page.eval((s) => window.__fsd.setSource(s), src);
+  await sleep(200);
+  await page.eval((o) => window.__fsd.setCursor(o), src.length);
+  await page.eval(() => document.querySelector('.cm-content').focus());
+  await page.type('actor21');
+  await waitFor(page, '.cm-tooltip-autocomplete', 'the completion list');
+  // CodeMirror ignores Enter for 75 ms after the list opens (interactionDelay)
+  await sleep(150);
+  await page.key('Enter');
+  await sleep(150);
+  const text = await doc(page);
+  expect(text === src + 'actor21SDF (1, 1) 1 f', `doc after completion: ${JSON.stringify(text)}`);
+}
+
 /** Double-click `selector`, replace the in-place input's text with `text`, then press `key`. */
 async function editInPlace(page, selector, text, key = 'Enter') {
   const at = await page.box(selector);
@@ -2368,6 +2386,7 @@ export const scenarios = {
   noScheduleWarning,
   linkEditorToDiagram,
   linkDiagramToEditor,
+  editorCompletion,
   inlineEdit,
   semanticZoom,
   inconsistentView,
