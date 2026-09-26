@@ -66,6 +66,7 @@ export function Timeline({
   open,
   onToggle,
   onJump,
+  times,
 }: {
   sched: ScheduleOk | null;
   facts: Facts | null;
@@ -73,6 +74,7 @@ export function Timeline({
   open: boolean;
   onToggle(): void;
   onJump?(t: Target): void;
+  times: Map<string, number>;
 }) {
   const [tablesOn, setTables] = useState(false);
   // nothing to play: the analysis is all there is to show
@@ -202,7 +204,7 @@ export function Timeline({
           ))}
         </div>
       )}
-      {tables && facts && <Analysis facts={facts} sched={sched} onJump={onJump} />}
+      {tables && facts && <Analysis facts={facts} sched={sched} times={times} onJump={onJump} />}
     </div>
   );
 }

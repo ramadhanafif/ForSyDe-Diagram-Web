@@ -1262,6 +1262,22 @@ body.tour-lift .driver-overlay {
   font-size: 10px;
 }
 
+.an-gantt text {
+  fill: var(--fg-dim);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.an-gantt rect {
+  fill: var(--accent);
+  opacity: 0.8;
+}
+
+.an-gantt .an-iter {
+  stroke: var(--fg-dim);
+  stroke-dasharray: 2 2;
+}
+
 .analysis .an-zero {
   color: var(--fg-dim);
   opacity: 0.5;

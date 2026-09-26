@@ -33,6 +33,7 @@ import {
 import { Toolbar, type ExportKind } from './Toolbar';
 import { Timeline } from './Timeline';
 import { analyze } from '../core/analysis';
+import { parseTimes } from '../sim/timed';
 import { scheduleWarning } from './scheduleWarning';
 import { explain } from './explain';
 import { download, sceneToSvg, svgToPngBlob } from '../export/svg';
@@ -356,6 +357,7 @@ export function App() {
   );
   const parts = useMemo(() => (model ? componentCount(model.ir) : 0), [model]);
   const facts = useMemo(() => (model ? analyze(model.ir) : null), [model]);
+  const times = useMemo(() => parseTimes(model?.source ?? ''), [model]);
   const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
   const { trace, stuck, pos } = sim;
   // why there is no schedule, in the model's names, with a checked fix when one exists
@@ -1214,6 +1216,7 @@ export function App() {
               <Timeline
                 sched={pipe.schedule?.ok ? pipe.schedule : null}
                 facts={facts}
+                times={times}
                 onJump={onJump}
                 sim={sim}
                 open={scheduleOpen}
