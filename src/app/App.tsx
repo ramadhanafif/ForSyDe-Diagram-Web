@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
@@ -1113,7 +1114,8 @@ export function App() {
                 aria-expanded={showOpen}
                 onClick={() => setShowOpen((v) => !v)}
               >
-                show {showOpen ? '▾' : '▸'}
+                show
+                {showOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               </button>
               {FLAG_LABELS.map(([key, label]) => (
                 <span key={key} className="switch-group">

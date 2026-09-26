@@ -1,4 +1,35 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  BookOpen,
+  ChevronDown,
+  CircleHelp,
+  Code,
+  Compass,
+  Copy,
+  Download,
+  Ellipsis,
+  FileCode,
+  FilePlus,
+  FileText,
+  FolderOpen,
+  GraduationCap,
+  Hourglass,
+  Image,
+  LayoutGrid,
+  Moon,
+  Pause,
+  Play,
+  Plus,
+  Presentation,
+  Shapes,
+  Square,
+  SquareCheck,
+  Sun,
+  TriangleAlert,
+  Workflow,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import pkg from '../../package.json';
 import { examples } from './examples';
 
@@ -7,12 +38,17 @@ export type ExportKind = 'hs' | 'png' | 'svg' | 'tikz' | 'copy-tikz';
 const REPO = 'https://github.com/ramadhanafif/ForSyDe-Diagram-Web';
 const FORSYDE = 'https://forsyde.github.io/';
 
-const EXPORTS: [ExportKind, string, string][] = [
-  ['hs', 'Haskell (.hs)', 'Download the source with the node positions, as a .hs file'],
-  ['png', 'PNG image', 'Download the diagram as a PNG image (2x)'],
-  ['svg', 'SVG', 'Download the diagram as a standalone SVG, for Inkscape or the web'],
-  ['tikz', 'TikZ (.tex)', 'Download a standalone LaTeX document drawing the diagram in TikZ'],
-  ['copy-tikz', 'Copy TikZ', 'Copy only the tikzpicture, to paste into your own document'],
+const EXPORTS: [ExportKind, string, string, LucideIcon][] = [
+  ['hs', 'Haskell (.hs)', 'Download the source with the node positions, as a .hs file', FileCode],
+  ['png', 'PNG image', 'Download the diagram as a PNG image (2x)', Image],
+  ['svg', 'SVG', 'Download the diagram as a standalone SVG, for Inkscape or the web', Shapes],
+  [
+    'tikz',
+    'TikZ (.tex)',
+    'Download a standalone LaTeX document drawing the diagram in TikZ',
+    FileText,
+  ],
+  ['copy-tikz', 'Copy TikZ', 'Copy only the tikzpicture, to paste into your own document', Copy],
 ];
 
 const SHORTCUTS: [string, string][] = [
@@ -133,19 +169,15 @@ function Menu(p: {
   );
 }
 
-const Mark = () => (
-  <svg className="brand-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-    <circle cx="3.5" cy="8" r="2.5" />
-    <circle cx="12.5" cy="8" r="2.5" />
-    <path d="M6.5 8h3.2M8.4 6.2 10 8l-1.6 1.8" />
-  </svg>
-);
+/** Icon size in the toolbar and its menus, px. */
+const ICON = 15;
+const Caret = () => <ChevronDown className="caret" size={13} />;
 
 export function Toolbar(p: ToolbarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const openFile = () => fileRef.current?.click();
   const exportItems = (role: 'menuitem' | undefined) =>
-    EXPORTS.map(([kind, label, title]) => (
+    EXPORTS.map(([kind, label, title, Icon]) => (
       <button
         key={kind}
         role={role}
@@ -153,6 +185,7 @@ export function Toolbar(p: ToolbarProps) {
         title={title}
         onClick={() => p.onExport(kind)}
       >
+        <Icon size={ICON} />
         {role || kind === 'copy-tikz' ? label : `Export ${label}`}
       </button>
     ));
@@ -187,7 +220,7 @@ export function Toolbar(p: ToolbarProps) {
         title="Source on GitHub"
         aria-label="ForSyDe Playground, source on GitHub"
       >
-        <Mark />
+        <Workflow className="brand-mark" size={17} />
         <span className="brand-name">ForSyDe Playground</span>
       </a>
       <a
@@ -233,14 +266,21 @@ export function Toolbar(p: ToolbarProps) {
         </select>
         <Menu
           className="file-menu"
-          summary="File"
+          summary={
+            <>
+              File
+              <Caret />
+            </>
+          }
           title="Start a blank model or open a .hs file"
           role="menu"
         >
           <button role="menuitem" title="Start a blank model" onClick={p.onNew}>
+            <FilePlus size={ICON} />
             New
           </button>
           <button role="menuitem" title="Open a .hs file" onClick={openFile}>
+            <FolderOpen size={ICON} />
             Open .hs…
           </button>
         </Menu>
@@ -260,7 +300,17 @@ export function Toolbar(p: ToolbarProps) {
           }
           onClick={p.onAnimate}
         >
-          {p.animating ? '❚❚ Pause' : '▶ Animate'}
+          {p.animating ? (
+            <>
+              <Pause size={ICON} fill="currentColor" />
+              Pause
+            </>
+          ) : (
+            <>
+              {blocked ? <TriangleAlert size={ICON} /> : <Play size={ICON} fill="currentColor" />}
+              Animate
+            </>
+          )}
         </button>
         <button
           className="toggle"
@@ -268,6 +318,7 @@ export function Toolbar(p: ToolbarProps) {
           title="Show or hide the schedule results: firing order, repetitions and buffer sizes"
           onClick={p.onToggleSchedule}
         >
+          {p.showSchedule ? <SquareCheck size={ICON} /> : <Square size={ICON} />}
           Schedule
         </button>
         <span className="sep" />
@@ -286,6 +337,7 @@ export function Toolbar(p: ToolbarProps) {
             }}
             onDragStart={(e) => e.dataTransfer.setData('application/forsyde-node', 'actor')}
           >
+            <Plus size={ICON} />
             actor
           </span>
           <span
@@ -294,6 +346,7 @@ export function Toolbar(p: ToolbarProps) {
             title="Drag onto an edge to delay that signal (mouse only)"
             onDragStart={(e) => e.dataTransfer.setData('application/forsyde-node', 'delay')}
           >
+            <Hourglass size={ICON} />
             delay
           </span>
         </span>
@@ -302,12 +355,19 @@ export function Toolbar(p: ToolbarProps) {
           title="Re-run the automatic layout, discarding dragged node positions"
           onClick={p.onTidy}
         >
+          <LayoutGrid size={ICON} />
           Tidy
         </button>
         <span className="spacer" />
         <Menu
           className="export-menu"
-          summary="Export"
+          summary={
+            <>
+              <Download size={ICON} />
+              Export
+              <Caret />
+            </>
+          }
           title="Save the diagram as an image or as LaTeX"
           role="menu"
         >
@@ -322,7 +382,7 @@ export function Toolbar(p: ToolbarProps) {
           title={dark ? 'Dark theme: click for light' : 'Light theme: click for dark'}
           onClick={p.onToggleAppTheme}
         >
-          {dark ? '☾' : '☀'}
+          {dark ? <Moon size={16} /> : <Sun size={16} />}
         </button>
         <span className="sep" />
         <button
@@ -334,6 +394,7 @@ export function Toolbar(p: ToolbarProps) {
           }
           onClick={p.onPresent}
         >
+          {p.presenting ? <X size={ICON} /> : <Presentation size={ICON} />}
           {p.presenting ? 'Exit present' : 'Present'}
         </button>
         <button
@@ -341,35 +402,56 @@ export function Toolbar(p: ToolbarProps) {
           title="Learn SDF on the lessons: rates, repetitions, buffers, the topology matrix, deadlock"
           onClick={p.onLearn}
         >
+          <GraduationCap size={ICON} />
           Learn SDF
         </button>
         <Menu
           className="more-menu row"
           summary={
             <>
-              <span className="more-help">?</span>
-              <span className="more-dots">…</span>
+              <CircleHelp className="more-help" size={16} />
+              <Ellipsis className="more-dots" size={16} />
             </>
           }
           label="More and help"
           title="Help, shortcuts and more"
         >
           <div className="m-compact">
-            <button onClick={p.onLearn}>Learn SDF</button>
-            <button onClick={p.onPresent}>Present</button>
+            <button onClick={p.onLearn}>
+              <GraduationCap size={ICON} />
+              Learn SDF
+            </button>
+            <button onClick={p.onPresent}>
+              <Presentation size={ICON} />
+              Present
+            </button>
             <button aria-pressed={p.showSchedule} onClick={p.onToggleSchedule}>
+              {p.showSchedule ? <SquareCheck size={ICON} /> : <Square size={ICON} />}
               Schedule
             </button>
-            <button onClick={p.onAddActor}>Add actor</button>
-            <button onClick={p.onNew}>New model</button>
-            <button onClick={openFile}>Open .hs…</button>
+            <button onClick={p.onAddActor}>
+              <Plus size={ICON} />
+              Add actor
+            </button>
+            <button onClick={p.onNew}>
+              <FilePlus size={ICON} />
+              New model
+            </button>
+            <button onClick={openFile}>
+              <FolderOpen size={ICON} />
+              Open .hs…
+            </button>
             {exportItems(undefined)}
           </div>
           <div className="m-fold">
-            <button onClick={p.onTidy}>Tidy layout</button>
+            <button onClick={p.onTidy}>
+              <LayoutGrid size={ICON} />
+              Tidy layout
+            </button>
             <span className="m-label">Style</span>
             {styleSwitch}
             <button aria-pressed={dark} onClick={p.onToggleAppTheme}>
+              <Moon size={ICON} />
               Dark theme
             </button>
           </div>
@@ -378,6 +460,7 @@ export function Toolbar(p: ToolbarProps) {
             title="Replay the guided tour of the interface"
             onClick={p.onTour}
           >
+            <Compass size={ICON} />
             Tour
           </button>
           <span className="m-label m-keys">Keyboard</span>
@@ -392,9 +475,11 @@ export function Toolbar(p: ToolbarProps) {
             ))}
           </dl>
           <a href={FORSYDE} target="_blank" rel="noreferrer">
+            <BookOpen size={ICON} />
             About ForSyDe
           </a>
           <a href={REPO} target="_blank" rel="noreferrer">
+            <Code size={ICON} />
             Source and issues
           </a>
         </Menu>
