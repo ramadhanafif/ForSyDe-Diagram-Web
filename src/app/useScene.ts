@@ -41,9 +41,30 @@ export const EMPTY_SCENE_STATE: SceneState = {
 /**
  * parse -> elaborate -> schedule -> layout, as a pure step from the previous
  * state: its scene seeds the layout for stability, and its model survives
- * when the new source does not elaborate.
+ * when the new source does not elaborate. A throw anywhere becomes an error
+ * diagnostic over the last good model, not a frozen diagram.
  */
 export function computeModel(
+  source: string,
+  flags: LabelFlags,
+  measure: Measure,
+  prev: SceneState,
+  style: DiagramStyle = 'lecture',
+): SceneState {
+  try {
+    return pipeline(source, flags, measure, prev, style);
+  } catch (err) {
+    const failed: Diagnostic = {
+      severity: 'error',
+      code: 'pipeline-failed',
+      message: `diagram failed: ${err instanceof Error ? err.message : String(err)}`,
+      span: { from: 0, to: 0 },
+    };
+    return { ...prev, diagnostics: [failed], stale: true, errorCount: 1 };
+  }
+}
+
+function pipeline(
   source: string,
   flags: LabelFlags,
   measure: Measure,
