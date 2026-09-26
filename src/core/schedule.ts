@@ -1,11 +1,13 @@
-import type { IRSystem } from './ir';
+import type { IRDelay, IRSignal, IRSystem } from './ir';
 import { isDelay } from './ir';
 
 /**
- * Port of forsyde-devtools SDFSchedule.hs (exact rational arithmetic
- * version). Iteration orders are preserved so results match the Haskell
- * implementation: actors in first-appearance order, edges normal-then-delay,
- * greedy scheduler fires the first fireable actor.
+ * Started as a port of forsyde-devtools SDFSchedule.hs (exact rational
+ * arithmetic): actors in first-appearance order, edges normal-then-delay. The
+ * firing order is not the devtools one: the scheduler is round-robin class S
+ * as in Sander's lecture notes (after a firing, try the next actor in order,
+ * not the first), which reproduces the notes' schedule for Listing 6.1.
+ * A disconnected graph gets a repetition vector per connected part.
  */
 
 export interface Actor {
@@ -39,8 +41,10 @@ export type ScheduleResult =
       buffers: [string, number][];
       repetitions: Map<string, number>;
       aliases: Map<string, string>;
+      /** Rank of the topology matrix, for analyze() so it need not row-reduce again. */
+      rank: number;
     }
-  | { ok: false; kind: ScheduleErrorKind; message: string };
+  | { ok: false; kind: ScheduleErrorKind; message: string; rank?: number };
 
 export type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
 
@@ -92,11 +96,14 @@ export function rowReduce(rows: Rat[][]): { rref: Rat[][]; pivots: number[] } {
     }
     if (pivotRow === -1) continue;
     const p = work[pivotRow]!;
-    const normalized = p.map((v) => div(v, p[col]!));
+    // Γ is almost all zeros: skip them, rat() runs a bigint gcd per call
+    const normalized = p.map((v) => (isZero(v) ? v : div(v, p[col]!)));
     const eliminate = (row: Rat[]): Rat[] => {
       const factor = row[col]!;
       if (isZero(factor)) return row;
-      return row.map((v, i) => sub(v, mul(factor, normalized[i]!)));
+      return row.map((v, i) =>
+        isZero(normalized[i]!) ? v : sub(v, mul(factor, normalized[i]!)),
+      );
     };
     work = [
       ...work.slice(0, done).map(eliminate),
@@ -111,9 +118,7 @@ export function rowReduce(rows: Rat[][]): { rref: Rat[][]; pivots: number[] } {
   return { rref: work, pivots };
 }
 
-function nullspaceBasis(mat: bigint[][]): Rat[][] {
-  const nCols = mat[0]?.length ?? 0;
-  const { rref, pivots } = rowReduce(mat.map((row) => row.map((v) => rat(v))));
+function nullspaceBasis(nCols: number, rref: Rat[][], pivots: number[]): Rat[][] {
   const basis: Rat[][] = [];
   for (let free = 0; free < nCols; free++) {
     if (pivots.includes(free)) continue;
@@ -145,11 +150,19 @@ export function toMinimalIntegers(xs: Rat[]): bigint[] {
 export function buildChannels(
   ir: IRSystem,
 ): { actors: Actor[]; edges: Edge[] } | { error: ScheduleResult } {
-  const delayNames = ir.processes.filter(isDelay).map((p) => p.name);
+  const delays = new Map(ir.processes.filter(isDelay).map((p) => [p.name, p]));
   const actorNames = [...new Set(ir.processes.filter((p) => !isDelay(p)).map((p) => p.name))];
-  const inputActorNames = new Set(
-    ir.signals.filter((s) => ir.inputs.includes(s.source.name)).map((s) => s.target.name),
-  );
+  // an actor behind delays on a system input still reads from that input
+  const inputActorNames = new Set<string>();
+  for (const s of ir.signals) {
+    if (!ir.inputs.includes(s.source.name)) continue;
+    let t = s.target.name;
+    for (const seen = new Set<string>(); delays.has(t) && !seen.has(t); ) {
+      seen.add(t);
+      t = ir.signals.find((x) => x.source.name === t)?.target.name ?? t;
+    }
+    inputActorNames.add(t);
+  }
   const actors: Actor[] = actorNames.map((n) => ({
     name: n,
     isInput: inputActorNames.has(n) || ir.inputs.includes(n),
@@ -161,8 +174,8 @@ export function buildChannels(
     const internal =
       !ir.inputs.includes(s.source.name) &&
       !ir.outputs.includes(s.target.name) &&
-      !delayNames.includes(s.source.name) &&
-      !delayNames.includes(s.target.name);
+      !delays.has(s.source.name) &&
+      !delays.has(s.target.name);
     if (!internal) continue;
     if (!actorSet.has(s.source.name) || !actorSet.has(s.target.name)) {
       return { error: err('invalid-graph', `Actor not found for signal '${s.name}'`) };
@@ -178,40 +191,61 @@ export function buildChannels(
     });
   }
 
-  for (const delay of ir.processes.filter(isDelay)) {
-    const incoming = ir.signals.filter((s) => s.target.name === delay.name);
-    const outgoing = ir.signals.filter((s) => s.source.name === delay.name);
+  // a chain of delays folds into one edge carrying the tokens of all of them
+  const walked = new Set<string>();
+  for (const head of delays.values()) {
+    const into = ir.signals.filter((s) => s.target.name === head.name);
+    if (into.length === 1 && delays.has(into[0]!.source.name)) continue; // walked from its head
+    let first: IRSignal | undefined;
+    let last: IRSignal | undefined;
+    let tokens = 0;
+    const aliases: [string, string][] = [];
+    for (let d: IRDelay | undefined = head; d && !walked.has(d.name); ) {
+      walked.add(d.name);
+      const incoming = ir.signals.filter((s) => s.target.name === d!.name);
+      const outgoing = ir.signals.filter((s) => s.source.name === d!.name);
+      // behind a system input nothing is checked (Haskell behavior)
+      if (ir.inputs.includes(first?.source.name ?? incoming[0]?.source.name ?? '')) {
+        first ??= incoming[0]!;
+        last = outgoing[0];
+        d = last && delays.get(last.target.name);
+        continue;
+      }
+      if (incoming.length === 0)
+        return { error: err('delay-wiring', `Delay '${d.name}' has no input signal`) };
+      if (outgoing.length === 0)
+        return { error: err('delay-wiring', `Delay '${d.name}' has no output signal`) };
+      if (incoming.length !== 1 || outgoing.length !== 1)
+        return {
+          error: err('delay-wiring', `Delay '${d.name}' must have exactly one input and output`),
+        };
+      first ??= incoming[0]!;
+      last = outgoing[0]!;
+      tokens += d.tokens.length;
+      aliases.push([last.name, first.name]);
+      d = delays.get(last.target.name);
+    }
     // delays adjacent to global I/O are ignored (Haskell behavior)
-    if (incoming.length === 1 && ir.inputs.includes(incoming[0]!.name)) continue;
-    if (outgoing.length === 1 && ir.outputs.includes(outgoing[0]!.name)) continue;
-    if (incoming.length === 0)
-      return { error: err('delay-wiring', `Delay '${delay.name}' has no input signal`) };
-    if (outgoing.length === 0)
-      return { error: err('delay-wiring', `Delay '${delay.name}' has no output signal`) };
-    if (incoming.length !== 1 || outgoing.length !== 1)
+    if (ir.inputs.includes(first!.source.name) || ir.outputs.includes(last!.target.name))
+      continue;
+    if (!actorSet.has(first!.source.name) || !actorSet.has(last!.target.name)) {
       return {
-        error: err('delay-wiring', `Delay '${delay.name}' must have exactly one input and output`),
-      };
-    const inSig = incoming[0]!;
-    const outSig = outgoing[0]!;
-    if (!actorSet.has(inSig.source.name) || !actorSet.has(outSig.target.name)) {
-      return {
-        error: err('delay-wiring', `Delay '${delay.name}' must connect two actors directly`),
+        error: err('delay-wiring', `Delay '${head.name}' must connect two actors directly`),
       };
     }
     edges.push({
-      edgeName: inSig.name,
-      src: inSig.source.name,
-      dst: outSig.target.name,
-      prod: inSig.source.rate,
-      cons: outSig.target.rate,
-      initTokens: delay.tokens.length,
-      aliases: [
-        [inSig.name, inSig.name],
-        [outSig.name, inSig.name],
-      ],
+      edgeName: first!.name,
+      src: first!.source.name,
+      dst: last!.target.name,
+      prod: first!.source.rate,
+      cons: last!.target.rate,
+      initTokens: tokens,
+      aliases: [[first!.name, first!.name], ...aliases],
     });
   }
+  const stray = [...delays.keys()].find((d) => !walked.has(d));
+  if (stray)
+    return { error: err('delay-wiring', `Delay '${stray}' is on a loop of delays only`) };
 
   return { actors, edges };
 }
@@ -235,7 +269,7 @@ function convertIRSystem(
 }
 
 // ---------------------------------------------------------------------------
-// Greedy scheduling + buffer simulation
+// Round-robin class S scheduling + buffer simulation
 
 function greedySchedule(actors: Actor[], edges: Edge[], reps: number[]): number[] | ScheduleResult {
   const incoming = actors.map((a, _i) => edges.flatMap((e, ei) => (e.dst === a.name ? [ei] : [])));
@@ -244,9 +278,12 @@ function greedySchedule(actors: Actor[], edges: Edge[], reps: number[]): number[
   const tokens = edges.map((e) => e.initTokens);
   const schedule: number[] = [];
   let left = remaining.reduce((a, b) => a + b, 0);
+  // round robin: after a firing the search goes on from the next actor
+  let start = 0;
   while (left > 0) {
     let fired = -1;
-    for (let i = 0; i < actors.length && fired === -1; i++) {
+    for (let k = 0; k < actors.length && fired === -1; k++) {
+      const i = (start + k) % actors.length;
       if (remaining[i]! <= 0) continue;
       const inc = incoming[i]!;
       if (inc.length === 0) {
@@ -267,6 +304,7 @@ function greedySchedule(actors: Actor[], edges: Edge[], reps: number[]): number[
     remaining[fired]!--;
     left--;
     schedule.push(fired);
+    start = (fired + 1) % actors.length;
   }
   return schedule;
 }
@@ -360,6 +398,20 @@ function computeIOBufferSizes(
 
 // ---------------------------------------------------------------------------
 
+/** Connected part of each actor (0, 1, ...) over the internal edges. */
+export function actorParts(actors: Actor[], edges: Edge[]): number[] {
+  const idx = new Map(actors.map((a, i) => [a.name, i]));
+  const parent = actors.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
+  for (const e of edges) parent[find(idx.get(e.src)!)] = find(idx.get(e.dst)!);
+  const ids = new Map<number, number>();
+  return actors.map((_, i) => {
+    const r = find(i);
+    if (!ids.has(r)) ids.set(r, ids.size);
+    return ids.get(r)!;
+  });
+}
+
 export function computeScheduleAndBuffers(ir: IRSystem): ScheduleResult {
   const conv = convertIRSystem(ir);
   if ('error' in conv) return conv.error;
@@ -367,6 +419,7 @@ export function computeScheduleAndBuffers(ir: IRSystem): ScheduleResult {
 
   let schedIdxs: number[];
   let repCounts: number[];
+  let rank = 0;
 
   if (edges.length === 0) {
     schedIdxs = actors.map((_, i) => i);
@@ -381,16 +434,29 @@ export function computeScheduleAndBuffers(ir: IRSystem): ScheduleResult {
         return 0n;
       }),
     );
-    const { pivots } = rowReduce(mat.map((row) => row.map((v) => rat(v))));
-    if (pivots.length !== actors.length - 1) {
-      return err(
-        'rank',
-        'Inconsistent rates: the topology matrix rank must equal the number of actors minus one',
-      );
+    // each connected part has rank = its actors - 1 when its rates are consistent
+    const parts = new Set(actorParts(actors, edges)).size;
+    const { rref, pivots } = rowReduce(mat.map((row) => row.map((v) => rat(v))));
+    rank = pivots.length;
+    if (rank !== actors.length - parts) {
+      return {
+        ok: false,
+        kind: 'rank',
+        message:
+          parts === 1
+            ? 'Inconsistent rates: the topology matrix rank must equal the number of actors minus one'
+            : `Inconsistent rates: the topology matrix rank must equal the number of actors minus the number of connected parts (${parts})`,
+        rank,
+      };
     }
-    const basis = nullspaceBasis(mat);
+    // one basis vector per part, zero outside it: minimal integers within each part
+    const basis = nullspaceBasis(actors.length, rref, pivots);
     if (basis.length === 0) return err('rank', 'No repetition vector found');
-    const repInt = toMinimalIntegers(basis[0]!);
+    const repInt = actors.map(() => 0n);
+    for (const b of basis) {
+      const idx = b.flatMap((r, i) => (isZero(r) ? [] : [i]));
+      toMinimalIntegers(idx.map((i) => b[i]!)).forEach((v, k) => (repInt[idx[k]!] = v));
+    }
     if (repInt.some((v) => v <= 0n)) {
       return err('no-positive-vector', 'No strictly positive repetition vector exists');
     }
@@ -426,5 +492,6 @@ export function computeScheduleAndBuffers(ir: IRSystem): ScheduleResult {
     buffers: [...io.ioBuffers, ...internal],
     repetitions,
     aliases: new Map([...delayAliases, ...io.aliases]),
+    rank,
   };
 }
