@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { analyze, balanceEquation, loopedSchedule } from '../src/core/analysis';
+import { analyze, balanceEquation, loopedSchedule, processFacts } from '../src/core/analysis';
 import { elaborate } from '../src/core/elaborate';
 import { parse } from '../src/core/parser';
 import { loadFixtures } from './helpers/fixtures';
@@ -53,5 +53,15 @@ d = delaySDF [0]
     expect(a.q).toEqual(new Map([['a_up', 3], ['a_down', 2]]));
     expect(balanceEquation(a.channels[0]!, a.q)).toBe('2·q(a_up) = 3·q(a_down): 2·3 = 3·2');
     expect(a.gamma).toEqual([[2, -3]]);
+  });
+
+  it('describes a process by its firings and the equations it is in', () => {
+    const a = analyze(lesson('02_multirate_chain'))!;
+    expect(processFacts(a, 'a_down')).toEqual([
+      { text: 'fires 2 times per schedule iteration' },
+      { text: 'reads 3 tokens from s_1 per firing', eq: '2·q(a_up) = 3·q(a_down): 2·3 = 3·2' },
+    ]);
+    const d = analyze(lesson('04_feedback_with_delay'))!;
+    expect(processFacts(d, 'd_1')[0]!.text).toBe('holds 1 token on s_1 before the first firing');
   });
 });

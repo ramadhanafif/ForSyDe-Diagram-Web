@@ -1036,6 +1036,9 @@ export function App() {
                 if (mid) setHints((h) => new Map(h).set(proc, mid));
               }}
               onRenamed={(from, to) => setRenames((r) => [...r, [from, to]])}
+              notes={marks?.notes.get(
+                popover.target.kind === 'node' ? popover.target.name : popover.target.edgeId,
+              )}
             />
           )}
           {menu && model && (

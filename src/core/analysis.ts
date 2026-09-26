@@ -183,3 +183,35 @@ export function balanceEquation(c: Channel, q?: Map<string, number> | null): str
   const qd = q.get(c.dst)!;
   return `${sym}: ${c.prod}·${qs} = ${c.cons}·${qd}`;
 }
+
+const tokens = (n: number) => `${n} token${n === 1 ? '' : 's'}`;
+
+/** What one process means in the SDF model: its firings and each balance equation it is in. */
+export function processFacts(facts: Analysis, name: string): { text: string; eq?: string }[] {
+  const out: { text: string; eq?: string }[] = [];
+  const q = facts.q?.get(name);
+  const folded = facts.channels.find((c) => c.delay === name);
+  if (folded)
+    return [
+      {
+        text: `holds ${tokens(folded.tokens)} on ${folded.signal} before the first firing`,
+        eq: balanceEquation(folded, facts.q),
+      },
+    ];
+  if (q !== undefined)
+    out.push({ text: `fires ${q} time${q === 1 ? '' : 's'} per schedule iteration` });
+  for (const c of facts.channels) {
+    if (c.src !== name && c.dst !== name) continue;
+    const text =
+      c.src === name
+        ? `writes ${tokens(c.prod)} to ${c.signal} per firing`
+        : `reads ${tokens(c.cons)} from ${c.signal} per firing`;
+    out.push({ text, eq: balanceEquation(c, facts.q) });
+  }
+  return out;
+}
+
+/** The channel a signal belongs to: its own, or for a delay's output the one the delay folds into. */
+export function channelOf(facts: Analysis, signal: string, source: string): Channel | undefined {
+  return facts.channels.find((c) => c.signal === signal || c.delay === source);
+}

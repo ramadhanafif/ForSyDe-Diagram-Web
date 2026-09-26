@@ -1420,6 +1420,27 @@ body {
   color: var(--accent);
 }
 
+.popover .pop-facts {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.popover .pop-facts code {
+  display: block;
+  color: var(--fg);
+  font-family: ui-monospace, monospace;
+}
+
+.popover .pop-note {
+  margin-top: 4px;
+  color: var(--error);
+  font-size: 11px;
+}
+
 .popover .err {
   color: var(--error);
 }
