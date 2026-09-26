@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
 import {
   addInput,
@@ -204,6 +204,22 @@ function componentCount(ir: IRSystem): number {
   return new Set(nodes.map(find)).size;
 }
 
+/** Phones, portrait or landscape: one pane at a time. theme.css has the same query. */
+const COMPACT_QUERY = '(max-width: 700px), (max-height: 500px) and (pointer: coarse)';
+/** On a phone a fit stops here: 10 px labels stay at 9 px and the view pans instead. */
+const COMPACT_FIT_MIN = 0.9;
+
+function useMedia(query: string): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      const m = window.matchMedia(query);
+      m.addEventListener('change', changed);
+      return () => m.removeEventListener('change', changed);
+    },
+    () => window.matchMedia(query).matches,
+  );
+}
+
 const NOTICE_TIMEOUT_MS = 5000;
 /** Presenting, a fit may zoom this far: 10 px labels read at 30 px on a small model. */
 const PRESENT_FIT_MAX = 3;
@@ -294,6 +310,10 @@ export function App() {
   );
   const [legendOpen, setLegendOpen] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const compact = useMedia(COMPACT_QUERY);
+  // on a phone one pane shows at a time; the diagram first
+  const [tab, setTab] = useState<'code' | 'diagram'>('diagram');
+  const [showOpen, setShowOpen] = useState(false);
   useEffect(() => storageSet('showFlags', JSON.stringify(showFlags)), [showFlags]);
 
   // transient toast for refused gestures, optionally with an undo action
@@ -945,7 +965,7 @@ export function App() {
   });
 
   return (
-    <div className={`app${presenting ? ' presenting' : ''}`}>
+    <div className={`app tab-${tab}${presenting ? ' presenting' : ''}`}>
       <Toolbar
         example={example}
         onExample={loadExample}
@@ -969,6 +989,28 @@ export function App() {
         presenting={presenting}
         onPresent={togglePresent}
       />
+      <nav className="tabs" role="tablist">
+        {(['code', 'diagram'] as const).map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => {
+              setTab(t);
+              setPopover(null);
+              setMenu(null);
+              if (t === 'diagram') setFitRequest((n) => n + 1); // it measured 0x0 while hidden
+            }}
+          >
+            {t === 'code' ? 'Code' : 'Diagram'}
+            {t === 'code' && diagnostics.some((d) => d.severity === 'error') && (
+              <span className="tab-errors" aria-label="has errors">
+                !
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
       <main className="panes" ref={panesRef} style={{ ['--split' as string]: splitRatio }}>
         <section className="pane editor-pane">
           <ErrorBar
@@ -1009,6 +1051,7 @@ export function App() {
             flash={flash}
             fitRequest={fitRequest}
             fitMax={presenting ? PRESENT_FIT_MAX : undefined}
+            fitMin={compact ? COMPACT_FIT_MIN : undefined}
             consumePendingFit={consumePendingFit}
             onNodeClick={(id, cx, cy) => {
               if (!model?.ir.processes.some((q) => q.name === id)) return;
@@ -1027,9 +1070,15 @@ export function App() {
             onDropInsert={onDropInsert}
             onConnect={onConnect}
           />
-          <div className="float-controls">
+          <div className={`float-controls${showOpen ? ' open' : ''}`}>
             <span className="detail-switch" title="Toggle each annotation on the diagram">
-              <span className="switch-title">show</span>
+              <button
+                className="switch-title"
+                aria-expanded={showOpen}
+                onClick={() => setShowOpen((v) => !v)}
+              >
+                show
+              </button>
               {FLAG_LABELS.map(([key, label]) => (
                 <span key={key} className="switch-group">
                   <button

@@ -146,6 +146,11 @@ export function harness(page: Page) {
       });
     },
 
+    /** Resize the page, as a phone or a rotated phone would be. */
+    async viewport(width: number, height: number) {
+      await page.setViewportSize({ width, height });
+    },
+
     /** The few DevTools calls the scenarios make, in Playwright terms. */
     async send(method: string, params: Record<string, unknown>) {
       if (method === 'Page.addScriptToEvaluateOnNewDocument')

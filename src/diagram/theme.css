@@ -61,6 +61,12 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  /* phones: the height left once the browser's bars are shown */
+  height: 100dvh;
+}
+
+.tabs {
+  display: none;
 }
 
 .toolbar {
@@ -686,6 +692,14 @@ body {
 
 .float-controls button:hover {
   color: var(--accent);
+}
+
+/* a heading on a wide screen; on a phone it folds and unfolds the panel */
+.float-controls button.switch-title {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  color: var(--fg-dim);
+  cursor: default;
 }
 
 /* legend card */
@@ -1522,4 +1536,126 @@ body {
 
 [data-theme='dark'] .cm-editor .cm-selectionBackground {
   background: rgba(68, 147, 248, 0.25);
+}
+
+/* ------------------------------------------------------------------ */
+/* phones (App.tsx COMPACT_QUERY): one pane at a time, the toolbar in  */
+/* one scrolling row, the SHOW panel folded, the popover a bottom sheet */
+
+@media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+  .toolbar {
+    flex-wrap: nowrap;
+    padding: 4px 8px;
+  }
+
+  .brand,
+  .version {
+    display: none;
+  }
+
+  .toolbar-items {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .toolbar-items > * {
+    flex: none;
+  }
+
+  /* what a phone reaches for first, before the row scrolls */
+  .toolbar-items select,
+  .toolbar-items .animate-button {
+    order: -1;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+
+  .tabs button {
+    flex: 1;
+    min-height: 36px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--fg-dim);
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .tabs button[aria-selected='true'] {
+    border-bottom-color: var(--accent);
+    color: var(--fg);
+  }
+
+  .tab-errors {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--error);
+    color: #fff;
+    font-size: 11px;
+  }
+
+  /* one column; the stored split ratio does not apply */
+  .panes {
+    grid-template-columns: 1fr;
+  }
+
+  .splitter,
+  .app.tab-diagram .editor-pane,
+  .app.tab-code .diagram-pane {
+    display: none;
+  }
+
+  .float-controls button.switch-title {
+    cursor: pointer;
+  }
+
+  .float-controls:not(.open) .switch-group {
+    display: none;
+  }
+
+  .float-controls:not(.open) > button {
+    display: none;
+  }
+
+  .popover {
+    position: fixed;
+    left: 0 !important;
+    right: 0;
+    top: auto !important;
+    bottom: 0;
+    max-height: 60dvh;
+    overflow: auto;
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* what the actor means comes before the fields to edit it */
+  .popover .pop-facts {
+    order: -1;
+    margin: 0 0 6px;
+    padding: 0 0 6px;
+    border-top: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dock {
+    max-height: 45%;
+  }
+}
+
+/* fingers, not a mouse pointer */
+@media (pointer: coarse) {
+  .toolbar button,
+  .toolbar select,
+  .toolbar summary,
+  .timeline .tl-bar button,
+  .float-controls button {
+    min-height: 36px;
+    min-width: 36px;
+  }
 }

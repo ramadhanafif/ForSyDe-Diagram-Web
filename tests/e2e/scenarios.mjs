@@ -1088,7 +1088,9 @@ async function presentMode(page, { url }) {
   await settle(page);
   expect(await exists(page, '.app.presenting'), 'P did not start presenting');
   expect(
-    await page.eval(() => getComputedStyle(document.querySelector('.editor-pane')).display === 'none'),
+    await page.eval(
+      () => getComputedStyle(document.querySelector('.editor-pane')).display === 'none',
+    ),
     'the editor is still shown',
   );
   await until(async () => (await k()) > k0 * 1.3, `a bigger fit than ${k0}`);
@@ -1103,6 +1105,44 @@ async function presentMode(page, { url }) {
   await page.key('Escape');
   expect(!(await exists(page, '.app.presenting')), 'Esc did not leave present mode');
   expect(!!(await doc(page)).length, 'the editor lost its text');
+}
+
+/** A phone: one pane at a time behind tabs, labels no smaller than 9 px, SHOW folded. */
+async function phoneLayout(page, { url }) {
+  await page.viewport(390, 844);
+  await open(page, url);
+  await load(page, MODEL);
+  const shown = (sel) =>
+    page.eval((s) => {
+      const el = document.querySelector(s);
+      return (
+        !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0
+      );
+    }, sel);
+  expect(await shown('.tabs'), 'no pane tabs on a phone');
+  expect(!(await shown('.editor-pane')), 'the editor shows beside the diagram');
+  expect(await shown('.diagram-pane'), 'the diagram is not the first tab');
+  expect(!(await shown('.float-controls .switch-group')), 'the SHOW panel is unfolded');
+  await until(
+    () =>
+      page.eval(() => {
+        const m = /scale\(([\d.]+)\)/.exec(
+          document.querySelector('.scene-viewport').style.transform,
+        );
+        return !!m && Number(m[1]) >= 0.9;
+      }),
+    'a fit of at least 0.9 on a phone',
+  );
+  await clickButton(page, '.tabs', 'Code');
+  expect(await shown('.editor-pane'), 'the Code tab did not show the editor');
+  expect(!(await shown('.diagram-pane')), 'the diagram stayed beside the editor');
+  // the stored split ratio is not a phone's business: the editor takes the width
+  const w = await page.eval(
+    () => document.querySelector('.editor-pane').getBoundingClientRect().width,
+  );
+  expect(w > 380, `the editor is ${w} px wide on a 390 px phone`);
+  await clickButton(page, '.tabs', 'Diagram');
+  expect(await shown('.diagram-pane'), 'the Diagram tab did not come back');
 }
 
 /** A reload restores the text and the pinned layout from localStorage. */
@@ -2307,6 +2347,7 @@ export const scenarios = {
   pinAndTidy,
   arrowKeys,
   presentMode,
+  phoneLayout,
   reloadRestores,
   hsRoundTrip,
   newModel,
