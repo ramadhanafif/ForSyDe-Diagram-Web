@@ -1,9 +1,11 @@
-import react from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { configDefaults } from 'vitest/config';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [react()],
+  // the React compiler memoizes components; eslint's react-hooks rules hold the code to it
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   base: process.env.BASE_PATH ?? '/ForSyDe-Diagram-Web/',
   build: {
     target: 'es2022',
