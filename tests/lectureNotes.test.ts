@@ -5,7 +5,11 @@ import { applySplices, deleteProcess, renameProcess, setTokens } from '../src/co
 import { elaborate } from '../src/core/elaborate';
 import { parse } from '../src/core/parser';
 import { computeScheduleAndBuffers } from '../src/core/schedule';
+import { layout } from '../src/layout';
+import { estimateMeasureFor } from '../src/scene/measure';
+import { validateScene } from '../src/scene/validate';
 import { simulate } from '../src/sim/simulate';
+import { DEFAULT_FLAGS } from './helpers/fixtures';
 
 /** Listing 6.1 of Sander's lecture notes (p. 178), verbatim with its inline delay. */
 const LISTING_6_1 = `module SDF_System_Model where
@@ -69,6 +73,16 @@ describe('an inline delay in the system block', () => {
   it('becomes a named delay process', () => {
     expect(ir.processes).toContainEqual({ type: 'Delay', name, tokens: [0, 0] });
     expect(analyze(ir)!.channels.find((c) => c.delay === name)?.tokens).toBe(2);
+  });
+
+  it('lays out cleanly in both styles', () => {
+    const schedule = computeScheduleAndBuffers(ir);
+    for (const style of ['lecture', 'modern'] as const) {
+      const measure = estimateMeasureFor(style);
+      const flags = DEFAULT_FLAGS;
+      const scene = layout({ ir, schedule, flags, measure, style });
+      expect(validateScene(scene, ir, { schedule, flags, measure, style })).toEqual([]);
+    }
   });
 
   it('can change its tokens and be deleted, but not renamed', () => {
