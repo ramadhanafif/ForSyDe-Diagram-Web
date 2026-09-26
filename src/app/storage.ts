@@ -18,17 +18,31 @@ export function storageSet(key: string, value: string): void {
   }
 }
 
-/** Stored JSON object merged over a fallback; missing or corrupt data yields the fallback. */
-export function storageGetJson<T extends object>(key: string, fallback: T): T {
+/** Stored JSON object; null when absent, corrupt or not an object. */
+function storageGetObject(key: string): Record<string, unknown> | null {
   const raw = storageGet(key);
-  if (raw == null) return fallback;
+  if (raw == null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback;
-    return { ...fallback, ...parsed };
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
-    return fallback;
+    return null;
   }
+}
+
+/**
+ * Stored JSON object merged over a fallback: only the fallback's keys, and
+ * only values of the same type. Missing or corrupt data yields the fallback.
+ */
+export function storageGetJson<T extends object>(key: string, fallback: T): T {
+  const stored = storageGetObject(key);
+  if (!stored) return fallback;
+  const out = { ...fallback };
+  for (const k of Object.keys(fallback) as (keyof T & string)[])
+    if (typeof stored[k] === typeof fallback[k]) out[k] = stored[k] as T[keyof T & string];
+  return out;
 }
 
 /**
@@ -49,7 +63,8 @@ export interface WorkingCopy {
 
 /** Stored working copy; null when absent or corrupt. Malformed positions are dropped. */
 export function storageGetWorkingCopy(key: string): WorkingCopy | null {
-  const raw = storageGetJson<Record<string, unknown>>(key, {});
+  const raw = storageGetObject(key);
+  if (!raw) return null;
   const { source, baseline, example, layoutEdited } = raw;
   if (typeof source !== 'string') return null;
   const positions = new Map<string, Point>();
