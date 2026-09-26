@@ -42,7 +42,7 @@ Deploys to GitHub Pages from `main` via `.github/workflows/deploy.yml`.
 
 The working copy (text, baseline, example, positions and the layout-edited
 flag) lives in localStorage as one JSON object under the key `workingCopy`;
-clear site data to reset to the default example.
+clear site data to reset to the first lesson, which a first visit opens.
 
 ## Editing from the diagram
 
@@ -57,15 +57,15 @@ of truth:
   (1-in-1-out processes; the consumer is rewired to the producer); Enter
   applies, Escape closes
 - drag the actor or delay chip from the toolbar onto an edge to insert it
-  there; dropping the actor chip on empty canvas adds a source actor
+  there; dropping the actor chip on empty canvas adds a source actor. A
+  click on the actor chip adds an actor fed by a new system input, wired to
+  a new system output
 - drag from an output port, or from a system input or output, onto an actor
   (its dashed input dot or anywhere on it) to feed that signal in as a new
   input; a dashed line follows the pointer, actors that accept the signal
   show a filled dot, the others fade. The actor's constructor and rates are
   rewritten in the source (point-free specs only), and a refused connection
   explains why in SDF terms
-- the Add actor toolbar button adds an actor fed by a new system input, wired
-  to a new system output
 - new actors get a runnable function stub appended to the file, for example
   `f_5 :: [Int] -> [Int]` with `f_5 _ = replicate 1 0`
 - dragging a node pins the whole layout: every node keeps its position across
@@ -89,8 +89,9 @@ of truth:
   rate marks exactly that literal), and Ctrl/Cmd-click jumps the cursor there
 
 The editor text and node positions autosave to the browser's localStorage and
-are restored on reload. New starts a blank model, Open .hs loads a file and
-restores the positions stored in its trailing `-- @layout` comment lines, and
+are restored on reload. In the File menu, New starts a blank model and Open .hs
+loads a file and restores the positions stored in its trailing `-- @layout`
+comment lines;
 Export > Haskell (.hs) downloads the source with those lines appended (GHC
 ignores them). New, Open and the example picker ask before discarding unsaved
 changes, including a dragged layout.
@@ -105,11 +106,15 @@ refits after structural changes.
   outputs in the last, cycles closed by edges that run backwards. Edges are
   orthogonal and every label has reserved space; the tests check that no
   two elements overlap on any bundled example.
-- Two styles, switchable from the toolbar: a modern default and a lecture
-  style that mimics the ForSyDe lecture notes / forsyde-latex figures. The
-  lecture style hides port dots until the pointer is over the process.
-- Each port sits on the process outline, ordered by argument top to bottom,
-  with its rate next to it (rates equal to 1 are hidden unless asked for).
+- Two styles, switched with Modern | Lecture in the toolbar: a modern
+  default and a lecture style that mimics the ForSyDe lecture notes /
+  forsyde-latex figures. The lecture style hides port dots until the
+  pointer is over the process.
+- Each port sits on the process outline with its rate next to it; rates
+  equal to 1 are drawn faint, and the SHOW panel can hide them. Ports are
+  ordered by argument top to bottom, except where reordering the ports on a
+  side avoids a crossing: then every port on that side carries its argument
+  (or result tuple) position as `#N`.
 - In the modern style the numbers are color coded: rates are teal, buffer
   sizes violet (shown as `buf n`), repetition badges blue. Every number has
   a hover tooltip explaining it with the actual process and signal names.
@@ -133,7 +138,7 @@ refits after structural changes.
   into their FIFO strips, each actor firing takes its tokens out of its
   buffers and sends the ones it produces to the next buffer, and at the end
   of the period the outputs take what collected in front of them. The
-  period loops until Stop. A model without a schedule plays the run that
+  period loops until Pause. A model without a schedule plays the run that
   gets stuck instead, and stops where it sticks.
 - The Schedule toolbar button controls all schedule results. The timeline
   docked under the diagram (collapsible to a summary chip) has one cell per
@@ -145,14 +150,21 @@ refits after structural changes.
   in and leave from strip slots, and the strips show the counts.
   Under the cells, a sparkline per signal plots its token count over the
   period with the maximum marked, which is where `buf n` is reached.
-  "tables" expands the repetition and buffer tables.
+  "analysis" opens the SDF analysis in textbook notation: the topology
+  matrix Γ with its rank test, the balance equations, the repetition vector
+  q, the schedule with repetition counts and the buffer sizes. Lines such as
+  `-- @time a_up 2` give actors execution times (1 by default), and the
+  analysis then adds the self-timed period, the latency of the first
+  iteration and a Gantt chart of the first three iterations.
 - When no schedule exists the model is run anyway to show why. On a
   deadlock the actors that wait are outlined in red dashes, the buffers they
   are short on are dashed, and hovering an actor lists each input it is short
   on as "needs 2, has 1". This includes a deadlocked loop behind a source that
   keeps firing. On inconsistent rates the signals whose tokens accumulate every
-  period are dashed and marked with a `+`. The red banner keeps a one-line
-  summary.
+  period are dashed and marked with a `+`. The red banner explains why in
+  the model's own names, and where initial tokens on one signal would fix a
+  deadlock it offers that edit as a button. The editor shows the same
+  explanation as a warning.
 - Pan by dragging empty canvas, zoom with the wheel (around the cursor) or a
   two-finger pinch, and use the +, - and fit buttons at the bottom right.
   There is no minimap. Zoomed out, fine print is hidden: below 55% the
@@ -164,6 +176,25 @@ refits after structural changes.
   TikZ document (`.tex`, plain TikZ with the arrows.meta library, compiles
   with pdflatex), or Copy TikZ for only the `tikzpicture`, to paste into
   your own report.
+
+## Lessons, presenting and phones
+
+- The example picker lists seven lessons (`examples/lessons`) before the
+  test fixtures: a single-rate chain, a multirate chain, fork and join,
+  feedback with a delay, a deadlock, inconsistent rates, and too few
+  initial tokens. **Learn SDF** walks through lessons 2, 5 and 6: rates,
+  repetitions, buffers, the topology matrix, deadlock and inconsistent
+  rates, each step pointing at what it explains on screen.
+- **Present** (or P) hides the editor and lets the diagram fill the screen
+  for a lecture: Space plays or pauses, the arrow keys step, Esc leaves.
+- The "?" menu holds the tour, the keyboard shortcuts and links to ForSyDe
+  and the source. Under 1400 px it shows as "…" and also holds Tidy, the
+  style switch and the theme.
+- On a phone the editor and the diagram are two tabs, and the toolbar keeps
+  the picker, Animate and "…", which holds the rest.
+- The editor completes constructors and the model's own names (Ctrl-Space
+  anywhere, by itself after `actor` or `delay`), writes `actorNMSDF` as a
+  snippet with default rates, and explains a constructor on hover.
 
 ## Supported model subset
 
