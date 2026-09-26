@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
 import {
   addInput,
@@ -450,7 +451,18 @@ export function App() {
   useEffect(() => {
     animateRef.current = startAnimation;
   });
-  const tourHooks = useMemo(() => ({ animate: () => animateRef.current() }), []);
+  const tourHooks = useMemo(
+    () => ({
+      animate: () => animateRef.current(),
+      // synchronously, so the tour measures the pane after it is shown
+      tab: (t: 'code' | 'diagram') => {
+        flushSync(() => setTab(t));
+        if (t === 'diagram') setFitRequest((n) => n + 1);
+      },
+      compact,
+    }),
+    [compact],
+  );
   const { stepSeq, stepMs } = sim;
   const travel = useMemo<Travel | null>(
     () =>
@@ -932,6 +944,9 @@ export function App() {
 
   const togglePresent = () => {
     setPresenting((v) => !v);
+    setTab('diagram'); // a phone on the Code tab would present nothing
+    // Space plays from here on: the Present button must not keep focus and click again
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     setPopover(null);
     setMenu(null);
     setFitRequest((n) => n + 1); // the pane changes size

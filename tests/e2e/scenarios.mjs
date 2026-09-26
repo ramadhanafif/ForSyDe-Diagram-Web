@@ -1105,6 +1105,11 @@ async function presentMode(page, { url }) {
   await page.key('Escape');
   expect(!(await exists(page, '.app.presenting')), 'Esc did not leave present mode');
   expect(!!(await doc(page)).length, 'the editor lost its text');
+  // a teacher clicks the button: Space must then play, not click the button again
+  await clickButton(page, '.toolbar', 'Present');
+  await page.key(' ');
+  await settle(page);
+  expect(await exists(page, '.app.presenting'), 'Space after the Present button left present mode');
 }
 
 /** A phone: one pane at a time behind tabs, labels no smaller than 9 px, SHOW folded. */
@@ -1143,6 +1148,10 @@ async function phoneLayout(page, { url }) {
   expect(w > 380, `the editor is ${w} px wide on a 390 px phone`);
   await clickButton(page, '.tabs', 'Diagram');
   expect(await shown('.diagram-pane'), 'the Diagram tab did not come back');
+  // presenting from the Code tab shows the diagram, not a blank screen
+  await clickButton(page, '.tabs', 'Code');
+  await page.key('p');
+  expect(await shown('.diagram-pane'), 'presenting from the Code tab shows nothing');
 }
 
 /** A reload restores the text and the pinned layout from localStorage. */
