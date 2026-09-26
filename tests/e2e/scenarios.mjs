@@ -2133,6 +2133,40 @@ async function animate(page, { url }) {
   await page.key('Escape');
 }
 
+/** Learn SDF walks the lessons, and every step points at something on screen. */
+async function learnSdf(page, { url }) {
+  await open(page, url);
+  await clickButton(page, '.toolbar', 'Learn SDF');
+  const titles = [
+    'Rates',
+    'Repetitions',
+    'Buffers',
+    'The same in matrix form',
+    'Deadlock',
+    'Inconsistent rates',
+  ];
+  for (const [i, want] of titles.entries()) {
+    await until(
+      () =>
+        page
+          .eval(() => document.querySelector('.driver-popover-title')?.textContent ?? '')
+          .then((t) => t === want),
+      `learn step ${i + 1} '${want}'`,
+      5000,
+    );
+    const pointed = await page.eval(() => {
+      const el = document.querySelector('.driver-active-element');
+      const r = el?.getBoundingClientRect();
+      return !!r && r.width + r.height > 0; // a straight edge has no height
+    });
+    expect(pointed, `learn step '${want}' points at nothing`);
+    const next = await page.box('.driver-popover-next-btn');
+    await page.click(next.x, next.y);
+  }
+  await until(async () => !(await exists(page, '.driver-popover')), 'the walk to end');
+  expect(/module Lesson06/.test(await doc(page)), 'the walk did not end on lesson 6');
+}
+
 async function reducedMotion(page, { url }) {
   await page.send('Emulation.setEmulatedMedia', {
     features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
@@ -2375,6 +2409,7 @@ export const scenarios = {
   arrowKeys,
   presentMode,
   phoneLayout,
+  learnSdf,
   reloadRestores,
   hsRoundTrip,
   newModel,

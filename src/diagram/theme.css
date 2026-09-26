@@ -802,6 +802,11 @@ body {
   white-space: nowrap;
 }
 
+/* a tour step where tokens move: a light overlay, so they are seen */
+body.tour-lift .driver-overlay {
+  opacity: 0.3;
+}
+
 /* presenting: the diagram alone, the toolbar down to what a lecture needs */
 .app.presenting .panes {
   grid-template-columns: 1fr;

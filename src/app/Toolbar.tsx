@@ -26,6 +26,7 @@ export interface ToolbarProps {
   /** Back to the automatic layout, dropping the dragged node positions. */
   onTidy(): void;
   onTour(): void;
+  onLearn(): void;
   /** The simulation is playing. */
   animating: boolean;
   /** A model is on screen; Animate explains itself when it has nothing to play. */
@@ -193,6 +194,13 @@ export function Toolbar(p: ToolbarProps) {
           onClick={p.onTour}
         >
           Tour
+        </button>
+        <button
+          className="learn"
+          title="Learn SDF on the lessons: rates, repetitions, buffers, the topology matrix, deadlock"
+          onClick={p.onLearn}
+        >
+          Learn SDF
         </button>
       </span>
     </header>

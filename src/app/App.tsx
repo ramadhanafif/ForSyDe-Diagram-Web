@@ -37,7 +37,7 @@ import { scheduleWarning } from './scheduleWarning';
 import { explain } from './explain';
 import { download, sceneToSvg, svgToPngBlob } from '../export/svg';
 import { sceneToTikz, tikzPicture } from '../export/tikz';
-import { startTour, TOUR_SEEN_KEY } from './tour';
+import { startLearn, startTour, TOUR_SEEN_KEY } from './tour';
 import { useScene, type SceneModel } from './useScene';
 import { BLANK_MODEL, exportFileName } from './files';
 import {
@@ -628,6 +628,24 @@ export function App() {
     [replaceDoc],
   );
 
+  // the Learn SDF walk loads lessons itself and waits for their diagrams
+  const learnHooks = {
+    load: async (name: string) => {
+      const ex = examples.find((e) => e.name === name);
+      if (!ex) return false;
+      if (
+        modelRef.current?.source !== ex.source &&
+        !replaceDoc(ex.source, name, new Map(), 'load this lesson')
+      )
+        return false;
+      for (let i = 0; i < 60 && modelRef.current?.source !== ex.source; i++)
+        await new Promise((r) => setTimeout(r, 50));
+      setTab('diagram');
+      return modelRef.current?.source === ex.source;
+    },
+    animate: () => animateRef.current(),
+  };
+
   const onNew = () => replaceDoc(BLANK_MODEL, '', new Map(), 'start a new model');
 
   const onOpen = (file: File) => {
@@ -995,6 +1013,7 @@ export function App() {
         onOpen={onOpen}
         onTidy={onTidy}
         onTour={() => void startTour(() => storageSet(TOUR_SEEN_KEY, '1'), tourHooks)}
+        onLearn={() => void startLearn(learnHooks)}
         animating={sim.playing}
         canAnimate={!!model}
         animateBlocked={nothingToRun}
