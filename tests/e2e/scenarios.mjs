@@ -1,6 +1,5 @@
-// E2E scenarios against the scene renderer's DOM contract (see
-// docs/diagram-engine-plan.md). Each scenario gets a fresh browser context
-// and throws on the first failed expectation.
+// E2E scenarios against the scene renderer's DOM contract. Each scenario
+// gets a fresh browser context and throws on the first failed expectation.
 import { SHOT_DIR, until } from './util.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
