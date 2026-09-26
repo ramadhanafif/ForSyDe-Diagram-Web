@@ -79,6 +79,16 @@ export function sceneMeta(ir: IRSystem, schedule: ScheduleResult | null): SceneM
 }
 
 /**
+ * The tag on a port drawn out of argument order: its 1-based position. Layout
+ * adds these after ordering the ports, so sceneLabels cannot list them.
+ */
+export const indexLabel = (port: string, index: number): ExpectedLabel => ({
+  kind: 'index',
+  owner: port,
+  text: `#${index + 1}`,
+});
+
+/**
  * The labels a scene shows for these flags: hidden labels are absent, so they
  * take no space. Layout places exactly these and validateScene checks them.
  */

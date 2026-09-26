@@ -13,6 +13,7 @@ const FONT: Record<LabelKind, { size: number; bold: boolean; lineHeight: number 
   signal: { size: 13, bold: false, lineHeight: 16.25 },
   rate: { size: 10.5, bold: true, lineHeight: 13.125 },
   buffer: { size: 10, bold: true, lineHeight: 12.5 },
+  index: { size: 10, bold: false, lineHeight: 12.5 },
 };
 
 // Advance widths in em, DejaVu Sans rounded up to 0.05. DejaVu is the widest of
@@ -80,6 +81,7 @@ export const LABEL_FONTS: Record<DiagramStyle, Record<LabelKind, LabelFont>> = {
     signal: { size: 11.5, weight: 500, italic: false, family: SANS, lineHeight: 14.375 },
     rate: { size: 10, weight: 600, italic: false, family: SANS, lineHeight: 12.5 },
     buffer: { size: 10, weight: 600, italic: false, family: SANS, lineHeight: 12.5 },
+    index: { size: 10, weight: 400, italic: false, family: SANS, lineHeight: 12.5 },
   },
   lecture: {
     name: { size: 14, weight: 400, italic: true, family: SERIF, lineHeight: 17.5 },
@@ -88,6 +90,7 @@ export const LABEL_FONTS: Record<DiagramStyle, Record<LabelKind, LabelFont>> = {
     signal: { size: 13, weight: 400, italic: true, family: SERIF, lineHeight: 16.25 },
     rate: { size: 10.5, weight: 400, italic: true, family: SERIF, lineHeight: 13.125 },
     buffer: { size: 10, weight: 400, italic: false, family: SERIF, lineHeight: 12.5 },
+    index: { size: 10, weight: 400, italic: false, family: SERIF, lineHeight: 12.5 },
   },
 };
 

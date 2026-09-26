@@ -9,10 +9,10 @@ import type {
   SceneNode,
 } from '../scene/types';
 import { contentBox, drawnPoints } from '../scene/metrics';
-import { sceneLabels, type ExpectedLabel } from '../scene/labels';
+import { indexLabel, sceneLabels, type ExpectedLabel } from '../scene/labels';
 import { geometry, ioKey, PITCH, type Geom } from './geometry';
-import { buildGraph, type GEdge, type Graph } from './graph';
-import { orderLayers, type End, type Item, type Piece } from './order';
+import { buildGraph, type GEdge, type GNode, type Graph } from './graph';
+import { orderLayers, type End, type Item, type Piece, type PortGroup } from './order';
 import { IO_SEP, placeY } from './place';
 import { routeGap, type GapRoute } from './route';
 
@@ -24,7 +24,9 @@ import { routeGap, type GapRoute } from './route';
  * 3. Long edges become one dummy item per layer they pass; a feedback edge
  *    runs back through every layer between its ends, with a hook in the gap
  *    where it turns.
- * 4. order.ts orders each layer to minimise crossings, place.ts assigns y,
+ * 4. order.ts orders each layer, and the ports on a node side, to minimise
+ *    crossings; a side drawn out of argument order gets index labels and its
+ *    node is sized again. place.ts assigns y,
  *    route.ts gives each bent piece a vertical track in its gap.
  * 5. Columns and gaps get their widths here, and the scene is assembled.
  */
@@ -75,6 +77,10 @@ function distributeLabels(g: Graph, labels: ExpectedLabel[]) {
   return { rows, byNode };
 }
 
+/**
+ * Every node's geometry, and `redo` to rebuild one node's after its ports
+ * were reordered (`n` with ins/outs in drawing order) with extra stub labels.
+ */
 function geometries(
   g: Graph,
   labels: ReturnType<typeof distributeLabels>,
@@ -96,28 +102,35 @@ function geometries(
     const above = Math.max(...pills.map((p) => -p.top));
     return Math.max(PITCH, below + IO_SEP + above);
   };
-  for (const n of nodes)
-    if (n.kind !== 'io')
-      geo.set(
-        n.id,
-        geometry(
-          n,
-          labels.byNode.get(n.id) ?? [],
-          labels.rows,
-          measure,
-          {
-            in: pitch(g.edges.filter((e) => e.to === n.id).map((e) => e.from)),
-            out: pitch(g.edges.filter((e) => e.from === n.id).map((e) => e.to)),
-          },
-          style,
-        ),
-      );
-  return geo;
+  const inner = (n: GNode, rows: Map<string, ExpectedLabel[]>) =>
+    geometry(
+      n,
+      labels.byNode.get(n.id) ?? [],
+      rows,
+      measure,
+      {
+        in: pitch(g.edges.filter((e) => e.to === n.id).map((e) => e.from)),
+        out: pitch(g.edges.filter((e) => e.from === n.id).map((e) => e.to)),
+      },
+      style,
+    );
+  for (const n of nodes) if (n.kind !== 'io') geo.set(n.id, inner(n, labels.rows));
+  const redo = (n: GNode, extra: ExpectedLabel[]) => {
+    const rows = new Map(labels.rows);
+    for (const l of extra) rows.set(l.owner, [...(rows.get(l.owner) ?? []), l]);
+    geo.set(n.id, inner(n, rows));
+  };
+  return { geo, redo };
 }
 
 export const layout: Layout = ({ ir, schedule, flags, measure, style = 'lecture', prev }) => {
   const g = buildGraph(ir);
-  const geo = geometries(g, distributeLabels(g, sceneLabels(ir, schedule, flags)), measure, style);
+  const { geo, redo } = geometries(
+    g,
+    distributeLabels(g, sceneLabels(ir, schedule, flags)),
+    measure,
+    style,
+  );
 
   // initial order: the previous scene's where a node kept its layer, else
   // DFS discovery, which keeps a chain's members at the same height
@@ -161,9 +174,12 @@ export const layout: Layout = ({ ir, schedule, flags, measure, style = 'lecture'
     });
     return { item: items.length - 1, dy: 0, frac: 0.5 };
   };
+  const endsAt = new Map<string, End[]>();
   const endOf = (node: string, key: string): End => {
     const a = geo.get(node)!.attach.get(key)!;
-    return { item: itemOf.get(node)!, dy: a.dy, frac: a.frac };
+    const e = { item: itemOf.get(node)!, dy: a.dy, frac: a.frac };
+    push(endsAt, key, e);
+    return e;
   };
 
   const edgePieces: Piece[][] = g.edges.map((e, ei) => {
@@ -200,7 +216,53 @@ export const layout: Layout = ({ ir, schedule, flags, measure, style = 'lecture'
   items.forEach((it, i) => layers[it.layer]!.push(i));
   const byGap = new Map<number, Piece[]>();
   for (const p of edgePieces.flat()) push(byGap, p.gap, p);
-  orderLayers(items, layers, byGap);
+  // the ports on each side of a node, free to trade slots
+  const groups: (PortGroup & { node: GNode; ids: string[] })[] = [];
+  for (const n of g.nodes.values())
+    for (const [out, ids] of [
+      [false, n.ins],
+      [true, n.outs],
+    ] as const) {
+      const fracs = ids.map((id) => geo.get(n.id)!.attach.get(id)!.frac);
+      // a strip's ports share one slot
+      if (new Set(fracs).size < 2) continue;
+      groups.push({
+        item: itemOf.get(n.id)!,
+        ends: ids.map((id) => endsAt.get(id) ?? []),
+        fracs,
+        slot: ids.map((_, i) => i),
+        out,
+        node: n,
+        ids,
+      });
+    }
+  orderLayers(items, layers, byGap, groups);
+
+  // a side whose ports moved is drawn in its new order, every port on it
+  // tagged with its argument position; the node's ends and extent follow
+  const moved = new Map<GNode, GNode>();
+  const tags: ExpectedLabel[] = [];
+  for (const grp of groups) {
+    if (grp.slot.every((s, i) => s === i)) continue;
+    const n = moved.get(grp.node) ?? { ...grp.node };
+    const drawn = grp.ids.map((id, i) => ({ id, s: grp.slot[i]! })).sort((p, q) => p.s - q.s);
+    n[grp.out ? 'outs' : 'ins'] = drawn.map((d) => d.id);
+    moved.set(grp.node, n);
+    for (const id of grp.ids) tags.push(indexLabel(id, g.ports.get(id)!.index));
+  }
+  for (const [orig, n] of moved) {
+    redo(n, tags);
+    const gm = geo.get(n.id)!;
+    for (const id of [...n.ins, ...n.outs])
+      for (const e of endsAt.get(id) ?? []) {
+        const at = gm.attach.get(id)!;
+        e.dy = at.dy;
+        e.frac = at.frac;
+      }
+    const it = items[itemOf.get(orig.id)!]!;
+    it.top = gm.top;
+    it.bottom = gm.bottom;
+  }
   placeY(items, layers, edgePieces.flat());
   const routes = new Map<number, GapRoute>();
   const pieceRuns = new Map<Piece, GapRoute['runs'][number]>();

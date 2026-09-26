@@ -37,6 +37,20 @@ export interface Piece {
   sb: 'L' | 'R';
 }
 
+/**
+ * The ports on one side of a node. ends[i] are the edge ends at the i-th port
+ * in argument order; slot[i] is the slot (End.frac) it takes, an index into
+ * fracs, which lists the side's slots top to bottom.
+ */
+export interface PortGroup {
+  item: number;
+  ends: End[][];
+  fracs: number[];
+  slot: number[];
+  /** Output side (faces the next layer). */
+  out: boolean;
+}
+
 /** Largest layer permuted exhaustively (6! = 720 orders). */
 const EXHAUSTIVE_MAX = 6;
 const BARY_ROUNDS = 4;
@@ -132,16 +146,19 @@ function permute(a: number[], visit: () => void): void {
  *    one, against the crossings of its two gaps.
  * 3. Whole dummy-chain moves (to the top or bottom, or two chains swapped),
  *    which one layer at a time cannot find.
- * 4. A joint search over two neighbouring layers, while budget remains.
+ * 4. Where crossings remain, the ports on a node side trade slots, each
+ *    order judged after the layer the side faces has reordered to suit it.
+ * 5. A joint search over two neighbouring layers, while budget remains.
  *
  * Every step keeps a change only when it strictly lowers the count, so ties
  * keep the initial order, which is the previous scene's where there is one.
- * Returns the piece pairs compared, all four phases counted.
+ * Returns the piece pairs compared, every phase counted.
  */
 export function orderLayers(
   items: Item[],
   layers: number[][],
   byGap: Map<number, Piece[]>,
+  ports: PortGroup[] = [],
 ): number {
   const work = { left: WORK_BUDGET };
   const setOrder = (l: number[]) => l.forEach((it, i) => (items[it]!.order = i));
@@ -300,6 +317,49 @@ export function orderLayers(
         if (work.left > 0) moved = tryMove([...layersOf(a), ...layersOf(b)], swap(a, b)) || moved;
     }
     if (!moved) break;
+  }
+
+  // ports trade slots on their side, only where the orders above still
+  // cross: a drawing that is already planar keeps its argument order. A new
+  // slot order is judged after the layer the side faces has reordered to
+  // suit it, since a port swap alone rarely helps a settled layer.
+  const setSlots = (g: PortGroup) =>
+    g.ends.forEach((es, i) => es.forEach((e) => (e.frac = g.fracs[g.slot[i]!]!)));
+  const improvePorts = (g: PortGroup): boolean => {
+    const L = items[g.item]!.layer;
+    const N = g.out ? L + 1 : L - 1;
+    const gaps = g.out ? [L - 1, L, L + 1] : [L - 2, L - 1, L];
+    const cost = () => gaps.reduce((t, gap) => t + gapCost(gap), 0);
+    const s = g.slot;
+    // ponytail: sides of more than EXHAUSTIVE_MAX ports keep argument order
+    if (s.length > EXHAUSTIVE_MAX || fact(s.length) * pairsIn(gaps) > work.left) return false;
+    let cur = cost();
+    if (cur === 0) return false;
+    const base = layers.map((l) => [...l]);
+    let slot = [...s];
+    let order = base;
+    permute(s, () => {
+      if (work.left <= 0) return;
+      setSlots(g);
+      if (N >= 0 && N < layers.length) improveLayer(N);
+      const c = cost();
+      if (c < cur) {
+        cur = c;
+        slot = [...s];
+        order = layers.map((l) => [...l]);
+      }
+      restore(base);
+    });
+    s.splice(0, s.length, ...slot);
+    setSlots(g);
+    restore(order);
+    return order !== base;
+  };
+  for (let r = 0; r < REFINE_ROUNDS && ports.length && work.left > 0 && total() > 0; r++) {
+    let improved = false;
+    for (const g of ports) improved = improvePorts(g) || improved;
+    if (!improved) break;
+    refine();
   }
 
   // last resort for small graphs: two neighbouring layers permuted jointly

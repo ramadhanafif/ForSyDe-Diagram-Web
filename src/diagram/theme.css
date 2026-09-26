@@ -318,7 +318,8 @@ body {
   opacity: 0.5;
 }
 
-.label-buffer {
+.label-buffer,
+.label-index {
   color: var(--fg-dim);
 }
 
@@ -453,9 +454,9 @@ body {
  * semantic zoom: zoomed out, fine print is unreadable, so it goes (the hover
  * card lists it). visibility keeps every box where the layout put it.
  */
-.scene-viewport.lod-mid :is(.label-rate, .label-buffer, .label-stack, .label-badge),
+.scene-viewport.lod-mid :is(.label-rate, .label-index, .label-buffer, .label-stack, .label-badge),
 .scene-viewport.lod-mid .buffer-strip,
-.scene-viewport.lod-far :is(.label-rate, .label-buffer, .label-stack, .label-badge),
+.scene-viewport.lod-far :is(.label-rate, .label-index, .label-buffer, .label-stack, .label-badge),
 .scene-viewport.lod-far :is(.label-signal, .buffer-strip, .scene-port) {
   visibility: hidden;
 }

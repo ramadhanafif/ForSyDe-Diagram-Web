@@ -169,10 +169,9 @@ export function buildGraph(ir: IRSystem): Graph {
   const layer = longestPath(inner, [...forward, ...reversed]) ?? longestPath(inner, forward)!;
   for (const n of nodes.values()) if (n.input) layer.set(n.id, 0);
 
-  let last = Math.max(0, ...layer.values());
-  for (const e of edges)
-    if (!e.feedback && innerSet.has(e.from) && !innerSet.has(e.to))
-      last = Math.max(last, layer.get(e.from)! + 1);
+  // system outputs get a column of their own, right of every node and of
+  // the hooks where feedback edges from the last inner column turn back
+  const last = Math.max(0, ...layer.values()) + (inner.length < nodes.size ? 1 : 0);
   for (const n of nodes.values()) if (!innerSet.has(n.id)) layer.set(n.id, last);
   return { nodes, edges, ports, layer, last };
 }

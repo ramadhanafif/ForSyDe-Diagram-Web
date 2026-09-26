@@ -1,6 +1,6 @@
 import { isDelay, type IRSystem } from '../core/ir';
 import type { ScheduleResult } from '../core/schedule';
-import { attachRef, edgeId, sceneLabels, type ExpectedLabel } from './labels';
+import { attachRef, edgeId, indexLabel, sceneLabels, type ExpectedLabel } from './labels';
 import { pointSegmentDist, rectAxisSegmentDist, segments, shapeCore } from './metrics';
 import type {
   DiagramStyle,
@@ -165,6 +165,7 @@ export function validateScene(scene: Scene, ir: IRSystem, ctx?: LabelContext): s
   // ports
   const expected = expectedPorts(ir);
   const portAt = new Map<string, Pt>();
+  const tagged: ExpectedLabel[] = [];
   for (const n of scene.nodes) {
     for (const p of n.ports) {
       if (portAt.has(p.id)) errs.push(`port ${p.id}: duplicate`);
@@ -191,16 +192,19 @@ export function validateScene(scene: Scene, ir: IRSystem, ctx?: LabelContext): s
               : p.at.y >= cy;
       if (!sideOk) errs.push(`port ${p.id}: at ${fmt(p.at)} is not on side ${p.side}`);
     }
+    // ports on a side may sit in any order; a side not in argument order
+    // tags every port with its position
     for (const dir of ['in', 'out'] as const) {
       for (const side of ['W', 'E'] as const) {
         const group = n.ports
           .filter((p) => p.dir === dir && p.side === side)
           .sort((a, b) => a.index - b.index);
-        for (let i = 1; i < group.length; i++)
-          if (!(group[i]!.at.y > group[i - 1]!.at.y + EPS))
-            errs.push(
-              `port ${group[i]!.id}: index ${group[i]!.index} is not below ${group[i - 1]!.id}`,
-            );
+        const inOrder = group.every((p, i) => i === 0 || p.at.y > group[i - 1]!.at.y + EPS);
+        if (!inOrder) for (const p of group) tagged.push(indexLabel(p.id, p.index));
+        const ys = group.map((p) => p.at.y).sort((a, b) => a - b);
+        for (let i = 1; i < ys.length; i++)
+          if (!(ys[i]! > ys[i - 1]! + EPS))
+            errs.push(`node ${n.id}: two ${dir} ports at y ${ys[i]}`);
       }
     }
   }
@@ -268,7 +272,7 @@ export function validateScene(scene: Scene, ir: IRSystem, ctx?: LabelContext): s
 
   // labels: present as the flags say, as large as their text, near their owner
   if (ctx) {
-    const want = new Set(sceneLabels(ir, ctx.schedule, ctx.flags).map(labelKey));
+    const want = new Set([...sceneLabels(ir, ctx.schedule, ctx.flags), ...tagged].map(labelKey));
     const have = new Set(scene.labels.map(labelKey));
     for (const k of want) if (!have.has(k)) errs.push(`label ${k}: missing`);
     for (const l of scene.labels) {
@@ -284,7 +288,7 @@ export function validateScene(scene: Scene, ir: IRSystem, ctx?: LabelContext): s
       const e = edgeById.get(l.owner);
       return e && Math.min(...segments(e.points).map(([a, b]) => rectAxisSegmentDist(l.box, a, b)));
     }
-    const at = l.kind === 'rate' ? portAt.get(l.owner) : undefined;
+    const at = l.kind === 'rate' || l.kind === 'index' ? portAt.get(l.owner) : undefined;
     if (at) return rectAxisSegmentDist(l.box, at, at);
     const n = byId.get(l.owner);
     if (!n || (l.kind === 'rate' && n.kind !== 'io')) return undefined;

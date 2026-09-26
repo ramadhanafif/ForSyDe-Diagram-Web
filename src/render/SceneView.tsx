@@ -98,8 +98,8 @@ function targetOf(t: EventTarget | null, model: SceneModel | null): Target | nul
   if (port) return portTarget(port.getAttribute('data-port-id'));
   const label = t.closest('[data-label-id]');
   const kind = label?.getAttribute('data-label-kind');
-  if (label && kind === 'rate') {
-    const owner = label.getAttribute('data-label-id')!.replace(/#rate$/, '');
+  if (label && (kind === 'rate' || kind === 'index')) {
+    const owner = label.getAttribute('data-label-id')!.replace(/#(rate|index)$/, '');
     // a rate at an io pill belongs to the pill's signal
     return portTarget(owner) ?? { kind: 'edge', signal: owner };
   }

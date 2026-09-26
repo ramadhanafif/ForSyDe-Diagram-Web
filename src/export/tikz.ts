@@ -54,6 +54,7 @@ function content(l: SceneLabel, style: DiagramStyle): string {
         .map((line) => `\\textit{${texText(line)}}`)
         .join('\\\\');
     case 'rate':
+    case 'index':
       return texText(l.text);
   }
 }

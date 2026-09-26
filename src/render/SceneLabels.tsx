@@ -133,6 +133,19 @@ export const SceneLabels = memo(function SceneLabels({ model, style, flags }: Pr
           </div>
         );
       }
+      case 'index': {
+        const port = ports.get(l.owner);
+        const what = port?.dir === 'out' ? 'result' : 'argument';
+        return (
+          <div
+            {...common}
+            data-owner-edge={edgeAt.get(l.owner) ?? ''}
+            title={`${what} ${l.text.slice(1)} of ${port?.node ?? ''}: ports on this side are drawn out of order to avoid a crossing`}
+          >
+            {l.text}
+          </div>
+        );
+      }
       case 'rate': {
         const edge = edgeAt.get(l.owner) ?? '';
         const port = ports.get(l.owner);

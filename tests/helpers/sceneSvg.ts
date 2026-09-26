@@ -13,6 +13,7 @@ const LABEL_COLOR: Record<LabelKind, string> = {
   signal: '#9a3412',
   rate: '#0f766e',
   buffer: '#7c3aed',
+  index: '#656d76',
 };
 const FONT_SIZE: Record<LabelKind, number> = {
   name: 14,
@@ -21,6 +22,7 @@ const FONT_SIZE: Record<LabelKind, number> = {
   signal: 13,
   rate: 10.5,
   buffer: 10,
+  index: 10,
 };
 
 function esc(s: string): string {

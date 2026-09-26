@@ -58,9 +58,11 @@ export interface SceneNode {
  * name: process name above the node. badge: repetition count. stack: text
  * inside the node (constructor, function, delay tokens). signal: signal name
  * on its edge. rate: token rate at a port. buffer: buffer size, 'buf N';
- * the modern style draws it as a FIFO strip of N slots.
+ * the modern style draws it as a FIFO strip of N slots. index: '#N', a
+ * port's 1-based argument or tuple position, on every port of a node side
+ * whose ports are not drawn in that order.
  */
-export type LabelKind = 'name' | 'badge' | 'stack' | 'signal' | 'rate' | 'buffer';
+export type LabelKind = 'name' | 'badge' | 'stack' | 'signal' | 'rate' | 'buffer' | 'index';
 
 export interface SceneLabel {
   id: string;
