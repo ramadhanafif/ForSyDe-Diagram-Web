@@ -1,6 +1,6 @@
 {
   "name": "forsyde-playground",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Browser editor for ForSyDe Shallow SDF models: live diagrams, schedule, analysis and token animation",
   "scripts": {
     "test": "vitest run",
