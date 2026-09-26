@@ -121,12 +121,22 @@ async function settled(ms = 1500) {
     await new Promise((r) => requestAnimationFrame(r));
 }
 
+/** The text changed while an export waited for the diagram to settle. */
+export class SourceChanged extends Error {
+  constructor() {
+    super('the text changed during the export, export again');
+  }
+}
+
 /**
- * Export the diagram in `wrap` (the .diagram-wrap element). `bounds` is the
- * scene bounds, which the SVG layer frames with its boundary box.
+ * Export the diagram in `wrap` (the .diagram-wrap element). `getBounds` gives
+ * the scene bounds once any animation has ended, which the SVG layer frames
+ * with its boundary box; null when the scene is no longer the one to export.
  */
-export async function sceneToSvg(wrap: HTMLElement, bounds: Rect): Promise<string> {
+export async function sceneToSvg(wrap: HTMLElement, getBounds: () => Rect | null): Promise<string> {
   await settled();
+  const bounds = getBounds();
+  if (!bounds) throw new SourceChanged();
   const svg = wrap.querySelector<SVGSVGElement>('.scene-svg');
   if (!svg) throw new Error('no diagram to export');
   // figures carry no hover or selection highlights
