@@ -1190,7 +1190,10 @@ async function reloadRestores(page, { url }) {
   await page.key('Shift+ArrowDown');
   await settle(page);
   const pinned = nodeBox(await scene(page), 'a_a');
-  await sleep(900); // past the autosave debounce
+  await until(
+    () => page.eval(() => !!JSON.parse(localStorage.getItem('workingCopy'))?.positions?.a_a),
+    'the autosave to store the pin',
+  );
   await open(page, url);
   expect((await doc(page)) === MODEL, 'the text did not survive a reload');
   expect(sameBox(nodeBox(await scene(page), 'a_a'), pinned), 'the pin did not survive a reload');

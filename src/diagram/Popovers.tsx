@@ -1,5 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { analyze, balanceEquation, channelOf, processFacts } from '../core/analysis';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { balanceEquation, channelOf, processFacts, type Analysis } from '../core/analysis';
 import {
   deleteProcess,
   insertOnEdge,
@@ -15,19 +15,32 @@ import { parseInts, parseTokens } from '../core/inlineEdit';
 import { isDelay, type IRProcess, type IRSignal } from '../core/ir';
 import type { SceneModel } from '../app/useScene';
 import type { EditorApi } from '../editor/EditorPane';
-import { findDefinitionOffset } from './labels';
 
 export type PopoverTarget = { kind: 'node'; name: string } | { kind: 'edge'; edgeId: string };
 
 /** Minimum gap between the popover and the pane edge. */
 export const POPOVER_MARGIN = 8;
 
+/**
+ * Runs `make` only while the diagram shows the editor text as it is; returns
+ * why it refused, or make's own refusal, else null. `quiet` leaves showing
+ * the refusal to the caller.
+ */
+export type EditGuard = (
+  make: (model: SceneModel, editor: EditorApi) => string | void,
+  quiet?: boolean,
+) => string | null;
+
 interface Props {
   target: PopoverTarget;
   x: number;
   y: number;
   model: SceneModel;
-  editorRef: React.RefObject<EditorApi | null>;
+  /** App's analysis of the model, null when it has none. */
+  facts: Analysis | null;
+  editGuarded: EditGuard;
+  /** Go to a function's definition in the editor; false when there is none. */
+  onGoto(fn: string): boolean;
   onClose(): void;
   /** A process was inserted on the target edge (before its splices apply). */
   onInserted?(proc: string): void;
@@ -42,7 +55,9 @@ export function EditPopover({
   x,
   y,
   model,
-  editorRef,
+  facts,
+  editGuarded,
+  onGoto,
   onClose,
   onInserted,
   onRenamed,
@@ -69,18 +84,13 @@ export function EditPopover({
   /** Guard: the model must still match the editor text, then apply.
       make() returns splices, or an error message string to display. */
   const apply = (make: () => Splice[] | string) => {
-    const editor = editorRef.current;
-    if (!editor || editor.getDoc() !== model.source) {
-      setError('source changed, reopen this popover');
-      return;
-    }
-    const result = make();
-    if (typeof result === 'string') {
-      setError(result);
-      return;
-    }
-    onClose();
-    editor.applySplices(result);
+    const refused = editGuarded((_, editor) => {
+      const result = make();
+      if (typeof result === 'string') return result;
+      onClose();
+      editor.applySplices(result);
+    }, true);
+    if (refused) setError(refused);
   };
 
   let body: React.ReactNode = null;
@@ -104,8 +114,9 @@ export function EditPopover({
           p={p}
           model={model}
           apply={apply}
-          editorRef={editorRef}
-          onClose={onClose}
+          onGoto={(fn) => {
+            if (onGoto(fn)) onClose();
+          }}
           onRenamed={onRenamed}
         />
       );
@@ -122,7 +133,7 @@ export function EditPopover({
       }}
     >
       {body}
-      <Facts target={target} model={model} />
+      {facts && <Facts target={target} model={model} facts={facts} />}
       {notes?.map((n) => (
         <div key={n} className="pop-note">
           {n}
@@ -134,9 +145,15 @@ export function EditPopover({
 }
 
 /** The SDF meaning of the target: firings, rates and balance equations with numbers. */
-function Facts({ target, model }: { target: PopoverTarget; model: SceneModel }) {
-  const facts = useMemo(() => analyze(model.ir), [model]);
-  if (!facts) return null;
+function Facts({
+  target,
+  model,
+  facts,
+}: {
+  target: PopoverTarget;
+  model: SceneModel;
+  facts: Analysis;
+}) {
   let rows: { text: string; eq?: string }[];
   if (target.kind === 'node') rows = processFacts(facts, target.name);
   else {
@@ -238,15 +255,13 @@ function NodeBody({
   p,
   model,
   apply,
-  editorRef,
-  onClose,
+  onGoto,
   onRenamed,
 }: {
   p: IRProcess;
   model: SceneModel;
   apply: Apply;
-  editorRef: React.RefObject<EditorApi | null>;
-  onClose(): void;
+  onGoto(fn: string): void;
   onRenamed?(oldId: string, newId: string): void;
 }) {
   const delay = isDelay(p);
@@ -338,18 +353,7 @@ function NodeBody({
           <label className="row">
             <span>function</span>
             <input value={fn} spellCheck={false} onChange={(e) => setFn(e.target.value)} />
-            <button
-              type="button"
-              onClick={() => {
-                const editor = editorRef.current;
-                if (!editor) return;
-                const at = findDefinitionOffset(editor.getDoc(), fn.trim());
-                if (at >= 0) {
-                  onClose();
-                  editor.gotoOffset(at);
-                }
-              }}
-            >
+            <button type="button" onClick={() => onGoto(fn.trim())}>
               goto
             </button>
           </label>

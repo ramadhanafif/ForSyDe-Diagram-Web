@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { preferredTheme, storageGet, storageGetJson, storageSet } from '../src/app/storage';
+import {
+  preferredTheme,
+  storageGet,
+  storageGetJson,
+  storageGetWorkingCopy,
+  storageSet,
+} from '../src/app/storage';
 
 const FALLBACK = { signals: true, rates: false };
 
@@ -57,6 +63,31 @@ describe('storageGetJson', () => {
   it('returns the fallback for non-object JSON', () => {
     vi.stubGlobal('localStorage', { getItem: () => '42', setItem: () => {} });
     expect(storageGetJson('showFlags', FALLBACK)).toEqual(FALLBACK);
+  });
+
+  it("keeps only the fallback's keys, and only values of the same type", () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => '{"signals":"no","rates":true,"extra":1}',
+      setItem: () => {},
+    });
+    expect(storageGetJson('showFlags', FALLBACK)).toEqual({ signals: true, rates: true });
+  });
+});
+
+describe('storageGetWorkingCopy', () => {
+  it('reads every field of a stored working copy', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () =>
+        '{"source":"a","baseline":"b","example":"e","positions":{"n":{"x":1,"y":2}},"layoutEdited":true}',
+      setItem: () => {},
+    });
+    expect(storageGetWorkingCopy('workingCopy')).toEqual({
+      source: 'a',
+      baseline: 'b',
+      example: 'e',
+      positions: new Map([['n', { x: 1, y: 2 }]]),
+      layoutEdited: true,
+    });
   });
 });
 

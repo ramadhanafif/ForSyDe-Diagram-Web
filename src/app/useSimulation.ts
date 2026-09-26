@@ -52,6 +52,16 @@ export interface Simulation {
 }
 
 /**
+ * Position after one step from `p` over a trace of `n` steps. A period wraps
+ * around in both directions (past the initial state, which equals the state
+ * after the last firing); a run that does not loop stops at its ends.
+ */
+export function stepPos(p: number, delta: 1 | -1, n: number, loops: boolean): number {
+  if (delta === 1) return p >= n ? (loops ? 1 : n) : p + 1;
+  return p <= 0 ? (loops ? n - 1 : 0) : p - 1;
+}
+
+/**
  * Playback over one schedule period. The position is kept per source text, so
  * an edit starts again from the initial state without an effect, while a
  * re-layout of the same text (SHOW toggles, style) keeps it. The timer runs
@@ -106,14 +116,8 @@ export function useSimulation(
       })),
     [key, n, speed],
   );
-  // a period wraps around in both directions; a stuck run ends where it got stuck
   const step = useCallback(
-    (delta: 1 | -1) =>
-      move(
-        (p) =>
-          delta === 1 ? (p >= n ? (loops ? 1 : n) : p + 1) : p <= 0 ? (loops ? n - 1 : 0) : p - 1,
-        delta === 1,
-      ),
+    (delta: 1 | -1) => move((p) => stepPos(p, delta, n, loops), delta === 1),
     [move, n, loops],
   );
   const atEnd = !loops && pos >= n;
@@ -125,35 +129,40 @@ export function useSimulation(
     return () => clearTimeout(t);
   }, [running, speed, step, atEnd, at.seq]);
 
-  return {
-    trace,
-    stuck,
-    pos,
-    stepSeq: at.key === key && at.fwd && pos > 0 ? at.seq : null,
-    stepMs: at.ms,
-    playing: running,
-    speed,
-    toggle: () => {
-      // playing a finished stuck run starts it over
-      if (!playing && atEnd) move(() => 0);
-      setPlaying((v) => !v);
-    },
-    play: () => {
-      if (atEnd) move(() => 0);
-      setPlaying(true);
-    },
-    stop: () => setPlaying(false),
-    step: (d) => {
-      setPlaying(false);
-      step(d);
-    },
-    reset: () => {
-      setPlaying(false);
-      move(() => 0);
-    },
-    seek: (p) => move(() => Math.max(0, Math.min(n, p))),
-    setSpeed,
-  };
+  const stepSeq = at.key === key && at.fwd && pos > 0 ? at.seq : null;
+  // one object per state change, so memo'd consumers skip renders that change nothing
+  return useMemo(
+    () => ({
+      trace,
+      stuck,
+      pos,
+      stepSeq,
+      stepMs: at.ms,
+      playing: running,
+      speed,
+      toggle: () => {
+        // playing a finished stuck run starts it over
+        if (!playing && atEnd) move(() => 0);
+        setPlaying((v) => !v);
+      },
+      play: () => {
+        if (atEnd) move(() => 0);
+        setPlaying(true);
+      },
+      stop: () => setPlaying(false),
+      step: (d: 1 | -1) => {
+        setPlaying(false);
+        step(d);
+      },
+      reset: () => {
+        setPlaying(false);
+        move(() => 0);
+      },
+      seek: (p: number) => move(() => Math.max(0, Math.min(n, p))),
+      setSpeed,
+    }),
+    [trace, stuck, pos, stepSeq, at.ms, running, speed, playing, atEnd, move, step, n],
+  );
 }
 
 /** Strip fill per edge for this playback position; used as the fill before an animated step. */

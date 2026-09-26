@@ -1,5 +1,5 @@
 import { Pause, Play, SkipBack, StepBack, StepForward, X } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { Analysis as Facts } from '../core/analysis';
 import type { Target } from '../core/links';
 import type { ScheduleOk } from '../core/schedule';
@@ -10,16 +10,56 @@ import { SPEEDS, type Simulation } from './useSimulation';
 /** Width of one firing cell; the sparklines share the scale. */
 const CELL_W = 44;
 const SPARK_H = 20;
+/** Cells rendered either side of the scrolled-to cell; the rest is padding. */
+const CELL_RADIUS = 200;
+/** The window moves in steps this many cells wide, so scrolling rarely re-renders. */
+const SCROLL_STEP = 50;
+/** Points per sparkline at most; longer series keep each bucket's minimum and maximum. */
+const SPARK_POINTS = 2000;
+
+/** The cells [from, to) to render out of `n`, `radius` either side of `center`. */
+export function cellWindow(n: number, center: number, radius: number) {
+  return { from: Math.max(0, center - radius), to: Math.min(n, center + radius) };
+}
+
+/** [index, value] pairs, at most about `max`: each bucket's minimum and maximum, in order. */
+export function downsample(values: number[], max: number): [number, number][] {
+  if (values.length <= max) return values.map((v, i) => [i, v]);
+  const size = Math.ceil(values.length / Math.floor(max / 2));
+  const out: [number, number][] = [];
+  for (let start = 0; start < values.length; start += size) {
+    let lo = start;
+    let hi = start;
+    for (let i = start; i < Math.min(values.length, start + size); i++) {
+      if (values[i]! < values[lo]!) lo = i;
+      if (values[i]! > values[hi]!) hi = i;
+    }
+    const [a, b] = lo < hi ? [lo, hi] : [hi, lo];
+    out.push([a, values[a]!]);
+    if (a !== b) out.push([b, values[b]!]);
+  }
+  return out;
+}
+
+interface Series {
+  sig: string;
+  values: number[];
+  max: number;
+  /** The polyline's points attribute, downsampled. */
+  points: string;
+}
 
 /** Tokens on each signal that ever holds one: the initial count, then after every firing. */
-function occupancy(trace: SimTrace): [string, number[], number][] {
+function occupancy(trace: SimTrace): Series[] {
   return Object.entries(trace.maxOccupancy)
     .filter(([, max]) => max > 0)
-    .map(([sig, max]) => [
-      sig,
-      [trace.initial[sig] ?? 0, ...trace.steps.map((s) => s.after[sig] ?? 0)],
-      max,
-    ]);
+    .map(([sig, max]) => {
+      const values = [trace.initial[sig] ?? 0, ...trace.steps.map((s) => s.after[sig] ?? 0)];
+      const points = downsample(values, SPARK_POINTS)
+        .map(([i, v]) => `${xAt(i)},${sparkY(v, max)}`)
+        .join(' ');
+      return { sig, values, max, points };
+    });
 }
 
 /** How a step reads: an actor firing, or tokens entering or leaving the system. */
@@ -31,9 +71,20 @@ function stepText(s: SimStep): string {
 
 /** Value i (after firing i) sits mid-cell under that firing; the initial value at x = 0. */
 const xAt = (i: number) => (i === 0 ? 0 : (i - 0.5) * CELL_W);
+const sparkY = (v: number, max: number) => SPARK_H - 3 - (v / max) * (SPARK_H - 6);
 
-function Sparkline({ values, max, pos }: { values: number[]; max: number; pos: number }) {
-  const y = (v: number) => SPARK_H - 3 - (v / max) * (SPARK_H - 6);
+function Sparkline({
+  series: { values, max, points },
+  pos,
+  from,
+  to,
+}: {
+  series: Series;
+  pos: number;
+  /** The rendered cells; the maximum is marked only under them. */
+  from: number;
+  to: number;
+}) {
   const w = (values.length - 1) * CELL_W;
   return (
     <svg
@@ -44,10 +95,20 @@ function Sparkline({ values, max, pos }: { values: number[]; max: number; pos: n
       viewBox={`0 0 ${w} ${SPARK_H}`}
     >
       <line className="tl-cursor" x1={xAt(pos)} x2={xAt(pos)} y1={0} y2={SPARK_H} />
-      <polyline points={values.map((v, i) => `${xAt(i)},${y(v)}`).join(' ')} />
-      {values.map((v, i) =>
-        v === max ? <circle key={i} className="tl-max" cx={xAt(i)} cy={y(v)} r={2.5} /> : null,
-      )}
+      <polyline points={points} />
+      {values
+        .slice(from, to + 1)
+        .map((v, k) =>
+          v === max ? (
+            <circle
+              key={from + k}
+              className="tl-max"
+              cx={xAt(from + k)}
+              cy={sparkY(v, max)}
+              r={2.5}
+            />
+          ) : null,
+        )}
     </svg>
   );
 }
@@ -60,7 +121,7 @@ function Sparkline({ values, max, pos }: { values: number[]; max: number; pos: n
  * how the model gets stuck, and with nothing to play it holds only the
  * analysis. Collapsed, it is a one-line summary chip.
  */
-export function Timeline({
+export const Timeline = memo(function Timeline({
   sched,
   facts,
   sim,
@@ -82,6 +143,14 @@ export function Timeline({
   const tables = tablesOn || !sim.trace;
   const { trace, pos } = sim;
   const n = trace?.steps.length ?? 0;
+  // an inconsistent model does not get stuck: its buffers grow without bound
+  const unbounded = sim.stuck?.kind === 'unbounded';
+  const series = useMemo(() => (trace ? occupancy(trace) : []), [trace]);
+  // only the cells near the scrolled-to one are in the DOM
+  const [scrolled, setScrolled] = useState(0);
+  // collapsing drops the scroller, which comes back scrolled to the start
+  if (!open && scrolled !== 0) setScrolled(0);
+  const { from, to } = cellWindow(n, scrolled, CELL_RADIUS);
   if (!open) {
     const maxBuffer = Math.max(0, ...(sched?.buffers.map(([, size]) => size) ?? []));
     return (
@@ -89,7 +158,7 @@ export function Timeline({
         {sched
           ? `iteration: ${n} steps, max buffer ${maxBuffer}`
           : trace
-            ? `stuck run: ${n} steps`
+            ? `${unbounded ? 'unbounded' : 'stuck'} run: ${n} steps`
             : 'analysis'}
       </button>
     );
@@ -155,7 +224,7 @@ export function Timeline({
                 ? 'stuck from the start: no actor can fire'
                 : 'initial state'
               : `step ${pos}/${n}: ${stepText(trace!.steps[pos - 1]!)}${
-                  !trace!.periodic && pos === n ? ' (stuck from here)' : ''
+                  !trace!.periodic && !unbounded && pos === n ? ' (stuck from here)' : ''
                 }`}
         </span>
         <span className="tl-spacer" />
@@ -174,37 +243,51 @@ export function Timeline({
         </button>
       </div>
       {trace && (
-        <div className="tl-scroll">
+        <div
+          className="tl-scroll"
+          onScroll={(e) => {
+            const cell = e.currentTarget.scrollLeft / CELL_W;
+            setScrolled(Math.round(cell / SCROLL_STEP) * SCROLL_STEP);
+          }}
+        >
           <div className="tl-row">
-            <span className="tl-name">{trace.periodic ? 'iteration' : 'stuck run'}</span>
-            <span className="tl-cells">
-              {trace.steps.map((s, i) => (
-                <button
-                  key={i}
-                  className={`tl-cell${s.kind === 'actor' ? '' : ` ${s.kind}`}${i === pos - 1 ? ' current' : ''}`}
-                  aria-current={i === pos - 1 ? 'step' : undefined}
-                  style={{ width: CELL_W }}
-                  title={`step ${i + 1}: ${stepText(s)}`}
-                  onClick={() => sim.seek(i + 1)}
-                >
-                  {s.kind === 'input'
-                    ? `${s.actor} ↦`
-                    : s.kind === 'output'
-                      ? `↦ ${s.actor}`
-                      : s.actor}
-                </button>
-              ))}
+            <span className="tl-name">
+              {trace.periodic ? 'iteration' : unbounded ? 'unbounded run' : 'stuck run'}
+            </span>
+            <span
+              className="tl-cells"
+              style={{ paddingLeft: from * CELL_W, paddingRight: (n - to) * CELL_W }}
+            >
+              {trace.steps.slice(from, to).map((s, k) => {
+                const i = from + k;
+                return (
+                  <button
+                    key={i}
+                    className={`tl-cell${s.kind === 'actor' ? '' : ` ${s.kind}`}${i === pos - 1 ? ' current' : ''}`}
+                    aria-current={i === pos - 1 ? 'step' : undefined}
+                    style={{ width: CELL_W }}
+                    title={`step ${i + 1}: ${stepText(s)}`}
+                    onClick={() => sim.seek(i + 1)}
+                  >
+                    {s.kind === 'input'
+                      ? `${s.actor} ↦`
+                      : s.kind === 'output'
+                        ? `↦ ${s.actor}`
+                        : s.actor}
+                  </button>
+                );
+              })}
             </span>
           </div>
-          {occupancy(trace).map(([sig, values, max]) => (
-            <div key={sig} className="tl-row" data-signal={sig}>
+          {series.map((sr) => (
+            <div key={sr.sig} className="tl-row" data-signal={sr.sig}>
               <span
                 className="tl-name"
-                title={`${sig} holds at most ${max} tokens in one iteration of this schedule`}
+                title={`${sr.sig} holds at most ${sr.max} tokens in one iteration of this schedule`}
               >
-                {sig} <b>{max}</b>
+                {sr.sig} <b>{sr.max}</b>
               </span>
-              <Sparkline values={values} max={max} pos={pos} />
+              <Sparkline series={sr} pos={pos} from={from} to={to} />
             </div>
           ))}
         </div>
@@ -212,4 +295,4 @@ export function Timeline({
       {tables && facts && <Analysis facts={facts} sched={sched} times={times} onJump={onJump} />}
     </div>
   );
-}
+});

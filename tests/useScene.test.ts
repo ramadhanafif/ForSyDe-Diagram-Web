@@ -1,10 +1,22 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { computeModel, EMPTY_SCENE_STATE } from '../src/app/useScene';
 import { sceneLabels } from '../src/scene/labels';
 import { canvasMeasure, estimateMeasure } from '../src/scene/measure';
 import { validateScene } from '../src/scene/validate';
 import { DEFAULT_FLAGS } from './helpers/fixtures';
+
+// the scheduler throws for a model with a process named boom, to reach computeModel's catch
+vi.mock('../src/core/schedule', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/core/schedule')>();
+  return {
+    ...real,
+    computeScheduleAndBuffers: (...args: Parameters<typeof real.computeScheduleAndBuffers>) => {
+      if (args[0].processes.some((p) => p.name === 'boom')) throw new Error('kaboom');
+      return real.computeScheduleAndBuffers(...args);
+    },
+  };
+});
 
 const src = readFileSync(new URL('../fixtures/SDF_example_026.hs', import.meta.url), 'utf8');
 const measure = estimateMeasure;
@@ -37,6 +49,14 @@ describe('computeModel', () => {
     const fixed = computeModel(src, DEFAULT_FLAGS, measure, bad);
     expect(fixed.stale).toBe(false);
     expect(fixed.model!.scene.nodes).toEqual(good.model!.scene.nodes);
+  });
+
+  it('turns a throw in the pipeline into a diagnostic and keeps the last good model', () => {
+    const good = computeModel(src, DEFAULT_FLAGS, measure, EMPTY_SCENE_STATE);
+    const bad = computeModel(src.replaceAll('a_2', 'boom'), DEFAULT_FLAGS, measure, good);
+    expect(bad.stale).toBe(true);
+    expect(bad.model).toBe(good.model);
+    expect(bad.diagnostics.map((d) => d.message)).toContain('diagram failed: kaboom');
   });
 
   it('re-lays out for new flags: hidden labels are absent', () => {
