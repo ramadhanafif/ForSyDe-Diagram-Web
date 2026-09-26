@@ -1,3 +1,4 @@
+import { Pause, Play, SkipBack, StepBack, StepForward, X } from 'lucide-react';
 import { useState } from 'react';
 import type { Analysis as Facts } from '../core/analysis';
 import type { Target } from '../core/links';
@@ -99,14 +100,14 @@ export function Timeline({
         {trace && (
           <>
             <button aria-label="reset" title="Back to the initial state" onClick={sim.reset}>
-              ⏮
+              <SkipBack size={14} />
             </button>
             <button
               aria-label="step back"
               title="Undo the last firing"
               onClick={() => sim.step(-1)}
             >
-              ◀
+              <StepBack size={14} />
             </button>
             <button
               aria-label={sim.playing ? 'pause' : 'play'}
@@ -114,14 +115,18 @@ export function Timeline({
               title="Play one iteration; it loops"
               onClick={sim.toggle}
             >
-              {sim.playing ? '❚❚' : '▶'}
+              {sim.playing ? (
+                <Pause size={14} fill="currentColor" />
+              ) : (
+                <Play size={14} fill="currentColor" />
+              )}
             </button>
             <button
               aria-label="step forward"
               title="Fire the next actor"
               onClick={() => sim.step(1)}
             >
-              ▶|
+              <StepForward size={14} />
             </button>
             <span
               className="tl-speed"
@@ -165,7 +170,7 @@ export function Timeline({
           </button>
         )}
         <button aria-label="collapse" title="Collapse to a summary" onClick={onToggle}>
-          ×
+          <X size={14} />
         </button>
       </div>
       {trace && (

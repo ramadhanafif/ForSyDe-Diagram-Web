@@ -1,3 +1,4 @@
+import { Maximize, Minus, Plus } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SceneModel } from '../app/useScene';
 import { addInputError } from '../core/edits';
@@ -752,10 +753,10 @@ export function SceneView(p: SceneViewProps) {
       )}
       <div className="zoom-controls">
         <button data-zoom="in" title="Zoom in" aria-label="Zoom in" onClick={() => zoomBy(1)}>
-          +
+          <Plus size={15} />
         </button>
         <button data-zoom="out" title="Zoom out" aria-label="Zoom out" onClick={() => zoomBy(-1)}>
-          −
+          <Minus size={15} />
         </button>
         <button
           data-zoom="fit"
@@ -763,7 +764,7 @@ export function SceneView(p: SceneViewProps) {
           aria-label="Fit the diagram to the pane"
           onClick={() => scene && fit(frameOf(scene.bounds))}
         >
-          ⤢
+          <Maximize size={13} />
         </button>
       </div>
       {!model && (
