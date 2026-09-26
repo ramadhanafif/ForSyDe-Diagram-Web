@@ -3,8 +3,14 @@ import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/
 import { tags } from '@lezer/highlight';
 import { lintGutter, setDiagnostics } from '@codemirror/lint';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
-import { drawSelection, EditorView, keymap, lineNumbers } from '@codemirror/view';
+import {
+  Compartment,
+  EditorState,
+  StateEffect,
+  StateField,
+  type Extension,
+} from '@codemirror/state';
+import { Decoration, drawSelection, EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { haskell } from '@codemirror/legacy-modes/mode/haskell';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { Diagnostic } from '../core/ast';
@@ -18,8 +24,34 @@ export interface EditorApi {
   applySplices(splices: Splice[]): void;
   /** Move the cursor and scroll to an offset (goto definition). */
   gotoOffset(offset: number): void;
+  /** Mark these spans as belonging to what the diagram points at; [] clears. Never moves the cursor. */
+  highlight(spans: { from: number; to: number }[]): void;
   getDoc(): string;
 }
+
+const setLinked = StateEffect.define<{ from: number; to: number }[]>();
+const linkedMark = Decoration.mark({ class: 'cm-linked' });
+
+/** The spans the diagram points at, kept in place by edits until the next setLinked. */
+const linkedField = StateField.define({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects)
+      if (e.is(setLinked)) {
+        const len = tr.state.doc.length;
+        deco = Decoration.set(
+          e.value
+            .map((s) => ({ from: Math.min(s.from, len), to: Math.min(s.to, len) }))
+            .filter((s) => s.to > s.from)
+            .sort((a, b) => a.from - b.from)
+            .map((s) => linkedMark.range(s.from, s.to)),
+        );
+      }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 
 /**
  * Reconfigured on app-theme toggle so CodeMirror's own `&dark` styles kick
@@ -51,18 +83,22 @@ export function schemeExtension(dark: boolean): Extension {
 
 interface Props {
   onChange(source: string): void;
+  /** The cursor moved (or the text changed under it): its offset. */
+  onCursor?(offset: number): void;
   diagnostics: Diagnostic[];
   dark: boolean;
 }
 
 export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
-  { onChange, diagnostics, dark },
+  { onChange, onCursor, diagnostics, dark },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onCursorRef = useRef(onCursor);
+  onCursorRef.current = onCursor;
 
   const darkRef = useRef(dark);
   darkRef.current = dark;
@@ -80,7 +116,10 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
       lintGutter(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+        if (update.selectionSet || update.docChanged)
+          onCursorRef.current?.(update.state.selection.main.head);
       }),
+      linkedField,
       EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } }),
     ];
     const v = new EditorView({
@@ -159,6 +198,9 @@ export const EditorPane = forwardRef<EditorApi, Props>(function EditorPane(
         effects: EditorView.scrollIntoView(at, { y: 'center' }),
       });
       v.focus();
+    },
+    highlight(spans) {
+      view.current?.dispatch({ effects: setLinked.of(spans) });
     },
     getDoc() {
       return view.current?.state.doc.toString() ?? '';

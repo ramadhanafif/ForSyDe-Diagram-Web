@@ -1,5 +1,4 @@
-import { toPng } from 'html-to-image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { orderDiagnostics, type Diagnostic } from '../core/ast';
 import {
   addInput,
@@ -10,93 +9,78 @@ import {
   outputRenames,
 } from '../core/edits';
 import { isDelay, type IRSystem } from '../core/ir';
-import { parseLayoutBlock, stripLayoutBlock, writeLayoutBlock, type Point } from '../core/layoutBlock';
-import type { ScheduleResult } from '../core/schedule';
 import { Menu, menuItems, type MenuTarget } from '../diagram/ContextMenu';
 import { findDefinitionOffset } from '../diagram/labels';
-import { edgeMidpoint, placeOver, renameKey, type PlacedBox } from '../diagram/placement';
-import { DEFAULT_FLAGS, DiagramPane, type ShowFlags } from '../diagram/DiagramPane';
 import { EditPopover, type PopoverTarget } from '../diagram/Popovers';
 import { EditorPane, type EditorApi } from '../editor/EditorPane';
+import { animating, setMotion, type Travel } from '../render/animate';
+import { Strip } from '../render/SceneShapes';
+import { SceneView, type SceneTarget } from '../render/SceneView';
+import { canvasMeasure, fifoSize } from '../scene/measure';
+import type { DiagramStyle, LabelFlags, Scene } from '../scene/types';
+import type { SimTrace } from '../sim/simulate';
 import { examples } from './examples';
-import { BLANK_MODEL, exportFileName } from './files';
 import {
+  type WorkingCopy,
   preferredTheme,
   storageGet,
   storageGetJson,
   storageGetWorkingCopy,
   storageSet,
   storageSetWorkingCopy,
-  type WorkingCopy,
 } from './storage';
-import { Toolbar } from './Toolbar';
+import { Toolbar, type ExportKind } from './Toolbar';
+import { Timeline } from './Timeline';
+import { download, sceneToSvg, svgToPngBlob } from '../export/svg';
+import { sceneToTikz, tikzPicture } from '../export/tikz';
 import { startTour, TOUR_SEEN_KEY } from './tour';
-import { usePipeline, type ModelState } from './usePipeline';
+import { useScene, type SceneModel } from './useScene';
+import { BLANK_MODEL, exportFileName } from './files';
+import {
+  parseLayoutBlock,
+  stripLayoutBlock,
+  writeLayoutBlock,
+  type Point,
+} from '../core/layoutBlock';
+import { edgeMidpoint, placeOver, renameKey, type PlacedBox } from '../diagram/placement';
+import { pinScene } from '../layout/pin';
+import { linkedAt, sourceSpans, type Target } from '../core/links';
+import { inlineEdit, type EditTarget } from '../core/inlineEdit';
+import { edgeId as edgeIdOf } from '../scene/labels';
+import { fillAt, simMarks, stuckLine, useSimulation } from './useSimulation';
 
-type ScheduleOk = Extract<ScheduleResult, { ok: true }>;
+/** Per-annotation visibility, driven by the floating SHOW toggles in the pane. */
+type ShowFlags = Omit<LabelFlags, 'unitRates'>;
 
-function SchedulePanel({
-  sched,
-  open,
-  onToggle,
-}: {
-  sched: ScheduleOk;
-  open: boolean;
-  onToggle(): void;
-}) {
-  if (!open) {
-    const maxBuffer = Math.max(0, ...sched.buffers.map(([, size]) => size));
-    return (
-      <button className="schedule-chip" title="Show the full schedule" onClick={onToggle}>
-        schedule: {sched.schedule.length} firings, max buffer {maxBuffer}
-      </button>
-    );
+const DEFAULT_FLAGS: ShowFlags = {
+  signals: true,
+  rates: true,
+  buffers: true,
+  repetitions: true,
+  constructors: true,
+  functions: true,
+};
+
+/** Test and debugging handle; the e2e harness drives the app through it. */
+interface FsdHandle {
+  getDoc(): string;
+  setSource(src: string): void;
+  scene(): Scene | null;
+  ir(): IRSystem | null;
+  /** One simulated schedule period, when the model has a schedule. */
+  trace(): SimTrace | null;
+  /** A layout transition or token travel is running (or only that kind). */
+  animating(kind?: 'layout' | 'tokens'): boolean;
+  /** Force motion off or on; null follows prefers-reduced-motion. */
+  setMotion(on: boolean | null): void;
+  /** Put the editor cursor at an offset, as a click in the text would. */
+  setCursor(offset: number): void;
+}
+
+declare global {
+  interface Window {
+    __fsd?: FsdHandle;
   }
-  return (
-    <div className="schedule-panel">
-      <button
-        className="schedule-strip"
-        title="One iteration of the static schedule; click to collapse"
-        onClick={onToggle}
-      >
-        schedule: {sched.schedule.join(' ')}
-      </button>
-      <div className="schedule-tables">
-        <table>
-          <thead>
-            <tr>
-              <th>actor</th>
-              <th>reps</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...sched.repetitions].map(([name, q]) => (
-              <tr key={name}>
-                <td>{name}</td>
-                <td>{q}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <table>
-          <thead>
-            <tr>
-              <th>signal</th>
-              <th>buffer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sched.buffers.map(([name, size]) => (
-              <tr key={name}>
-                <td>{name}</td>
-                <td>{size}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 }
 
 const FLAG_LABELS: [keyof ShowFlags, string][] = [
@@ -108,17 +92,25 @@ const FLAG_LABELS: [keyof ShowFlags, string][] = [
   ['functions', 'functions'],
 ];
 
-function Legend() {
+/** A three-slot strip holding one token, as the modern style draws a buffer. */
+const LEGEND_STRIP = fifoSize(3, 0);
+
+function Legend({ style }: { style: DiagramStyle }) {
+  const modern = style === 'modern';
   return (
     <div className="legend">
       <div className="legend-title">Legend</div>
       <div className="legend-row">
         <span className="legend-swatch swatch-actor" />
-        <span>actor: constructor, rates, function inside</span>
+        <span>actor: constructor and function inside</span>
       </div>
       <div className="legend-row">
         <span className="legend-swatch swatch-delay" />
-        <span>delay with its initial tokens [..]</span>
+        <span>
+          {modern
+            ? 'delay: its initial tokens, pre-filled on the signal'
+            : 'delay with its initial tokens [..]'}
+        </span>
       </div>
       <div className="legend-row">
         <span className="legend-pill">s</span>
@@ -129,8 +121,31 @@ function Legend() {
         <span>rate at an edge end: tokens produced or consumed per firing</span>
       </div>
       <div className="legend-row">
-        <span className="legend-glyph legend-buffer">buf 4</span>
-        <span>buffer: maximum tokens held on the signal</span>
+        {modern ? (
+          <svg
+            className="legend-glyph"
+            width={LEGEND_STRIP.w}
+            height={LEGEND_STRIP.h}
+            aria-hidden="true"
+          >
+            <rect
+              className="fifo-outline"
+              x={0.5}
+              y={0.5}
+              width={LEGEND_STRIP.w - 1}
+              height={LEGEND_STRIP.h - 1}
+              rx={3}
+            />
+            <Strip x={0} y={0} capacity={3} filled={1} />
+          </svg>
+        ) : (
+          <span className="legend-glyph legend-buffer">&middot;4</span>
+        )}
+        <span>
+          {modern
+            ? 'buffer: one slot per token it must hold, filled slots hold tokens now'
+            : 'buffer: maximum tokens held on the signal'}
+        </span>
       </div>
       <div className="legend-row">
         <span className="legend-glyph legend-badge">&times;2</span>
@@ -188,9 +203,9 @@ function componentCount(ir: IRSystem): number {
 
 const NOTICE_TIMEOUT_MS = 5000;
 const FLASH_TIMEOUT_MS = 1800;
+
 /** Keystroke quiet period before the editor text is written to localStorage. */
 const AUTOSAVE_MS = 500;
-
 /** localStorage key for the working copy (text, baseline, example, positions). */
 const WORKING_COPY_KEY = 'workingCopy';
 /** Horizontal distance from a new source actor's center to its io nodes' centers. */
@@ -215,31 +230,23 @@ const initialWorkingCopy = (): WorkingCopy => {
   };
 };
 
-const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
-
-const initialDiagramTheme = (): 'modern' | 'lecture' =>
-  storageGet('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
-
-/** Elk's boxes for every node of a laid-out model, placement's input. */
-function elkBoxes(model: ModelState): PlacedBox[] {
-  return (model.dg.graph.children ?? []).map((c) => ({
-    id: c.id,
-    x: c.x ?? 0,
-    y: c.y ?? 0,
-    width: c.width ?? 0,
-    height: c.height ?? 0,
+/** The automatic layout's boxes for every node of a model, placement's input. */
+const sceneBoxes = (model: SceneModel): PlacedBox[] =>
+  model.scene.nodes.map((n) => ({
+    id: n.id,
+    x: n.box.x,
+    y: n.box.y,
+    width: n.box.w,
+    height: n.box.h,
   }));
-}
 
 /** Place every node of `model` over `pos`; see placement's placeOver. */
-function placeModel(
-  model: ModelState,
+const placeModel = (
+  model: SceneModel,
   pos: Map<string, Point>,
   hints: Map<string, Point>,
   known?: Set<string>,
-) {
-  return placeOver(elkBoxes(model), model.ir.signals, pos, hints, known);
-}
+) => placeOver(sceneBoxes(model), model.ir.signals, pos, hints, known);
 
 /** Hints for a source actor created at `at`: the actor there, its io pills either side. */
 function sourceActorHints(created: string[], at: Point): [string, Point][] {
@@ -251,37 +258,32 @@ function sourceActorHints(created: string[], at: Point): [string, Point][] {
   ];
 }
 
-/** Signal carried by a source handle: `proc.out.sig` or `sig.io.src`. */
-function handleSignal(handle: string): string | null {
-  const parts = handle.split('.');
-  if (parts[1] === 'out') return parts[2] ?? null;
-  if (parts[1] === 'io') return parts[0] ?? null;
-  return null;
-}
+const initialAppTheme = (): string => storageGet('theme') ?? preferredTheme();
+
+const initialDiagramTheme = (): 'modern' | 'lecture' =>
+  storageGet('diagramTheme') === 'lecture' ? 'lecture' : 'modern';
 
 export function App() {
   const editorRef = useRef<EditorApi>(null);
   const paneRef = useRef<HTMLElement>(null);
   const [source, setSource] = useState('');
-  const pipe = usePipeline(source);
-  const model = pipe.model;
 
   const [initial] = useState(initialWorkingCopy);
   const [example, setExample] = useState(initial.example);
-  // node positions keyed by process or io signal name; empty means pure elk layout
+  // node positions keyed by process or io signal name; empty means the automatic layout
   const [positions, setPositions] = useState(initial.positions);
   // the replaced document's positions, shown until its model leaves the screen,
   // so the old diagram does not re-lay out under the new document's positions
   const [heldPositions, setHeldPositions] = useState<Map<string, Point> | null>(null);
-  // the model on screen, for handlers and callbacks that must not go stale;
-  // updated after the diagram's effects, so a fit consults the committed model
-  const modelRef = useRef(model);
-  useEffect(() => {
-    modelRef.current = model;
-  }, [model]);
+  // gesture points (node centers) and diagram renames waiting for the model they produce
+  const [hints, setHints] = useState<Map<string, Point>>(() => new Map());
+  const [renames, setRenames] = useState<[string, string][]>([]);
+  const queueRenames = useCallback((pairs: [string, string][]) => {
+    if (pairs.length) setRenames((r) => [...r, ...pairs]);
+  }, []);
   const [showUnitRates, setShowUnitRates] = useState(false);
   const [showSchedule, setShowSchedule] = useState(true);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(true);
   const [showFlags, setShowFlags] = useState<ShowFlags>(() =>
     storageGetJson('showFlags', DEFAULT_FLAGS),
   );
@@ -300,12 +302,109 @@ export function App() {
   const [diagramTheme, setDiagramTheme] = useState(initialDiagramTheme);
   const [fitRequest, setFitRequest] = useState(0);
 
-  // gesture points (node centers) and popover renames waiting for the model they produce
-  const [hints, setHints] = useState<Map<string, Point>>(() => new Map());
-  const [renames, setRenames] = useState<[string, string][]>([]);
-  const queueRenames = useCallback((pairs: [string, string][]) => {
-    if (pairs.length) setRenames((r) => [...r, ...pairs]);
-  }, []);
+  // SHOW toggles re-lay out (hidden labels take no space); the Schedule
+  // button hides every schedule result. Both inputs keep their identity
+  // between renders, or useScene would lay out on every render.
+  const flags = useMemo<LabelFlags>(
+    () => ({
+      ...showFlags,
+      unitRates: showUnitRates,
+      buffers: showFlags.buffers && showSchedule,
+      repetitions: showFlags.repetitions && showSchedule,
+    }),
+    [showFlags, showUnitRates, showSchedule],
+  );
+  const measure = useMemo(() => canvasMeasure(diagramTheme), [diagramTheme]);
+  const pipe = useScene(source, flags, measure, diagramTheme);
+  const model = pipe.model;
+  const shownPositions = heldPositions ?? positions;
+  // what the diagram draws: the model's scene, with pinned nodes where the user put them
+  const view = useMemo(
+    () =>
+      model && shownPositions.size
+        ? { ...model, scene: pinScene(model.scene, shownPositions) }
+        : model,
+    [model, shownPositions],
+  );
+  const parts = useMemo(() => (model ? componentCount(model.ir) : 0), [model]);
+  const sim = useSimulation(model, parts === 1, showSchedule && scheduleOpen);
+  const { trace, stuck, pos } = sim;
+  const marks = useMemo(
+    () => (model ? simMarks(model, { trace: showSchedule ? trace : null, stuck, pos }) : undefined),
+    [model, trace, stuck, pos, showSchedule],
+  );
+  // editor <-> diagram links, valid only while the diagram shows the text as it is
+  const [cursor, setCursor] = useState<number | null>(null);
+  const current = !!model && model.source === source;
+  const linked = useMemo(
+    () =>
+      current && cursor !== null ? linkedAt(model!.ir, model!.source, cursor, edgeIdOf) : undefined,
+    [current, cursor, model],
+  );
+  const spansOf = useCallback(
+    (t: Target) =>
+      model && editorRef.current?.getDoc() === model.source
+        ? sourceSpans(model.ir, model.source, t)
+        : [],
+    [model],
+  );
+  const onHoverTarget = useCallback(
+    (t: Target | null) => editorRef.current?.highlight(t ? spansOf(t) : []),
+    [spansOf],
+  );
+  const onJump = useCallback(
+    (t: Target) => {
+      const [first] = spansOf(t);
+      if (first) editorRef.current?.gotoOffset(first.from);
+    },
+    [spansOf],
+  );
+  /** An edit in place on the canvas: the same splices and staleness guard as the popover. */
+  const onInlineEdit = useCallback(
+    (t: EditTarget, text: string): string | null => {
+      const editor = editorRef.current;
+      if (!model || !editor || editor.getDoc() !== model.source)
+        return 'the text changed since the diagram was drawn, try again';
+      const r = inlineEdit(model.ir, model.source, t, text);
+      if (typeof r === 'string') return r;
+      const to = text.trim();
+      if (t.kind === 'name') queueRenames([[t.node, to]]);
+      if (t.kind === 'signal') queueRenames([[t.signal, to]]);
+      editor.applySplices(r);
+      return null;
+    },
+    [model, queueRenames],
+  );
+
+  // a new model moves text around: drop highlights that point at old offsets
+  useEffect(() => editorRef.current?.highlight([]), [model]);
+
+  // one click to watch the model run: bring the timeline on screen and play
+  const startAnimation = () => {
+    setShowSchedule(true);
+    setScheduleOpen(true);
+    sim.play();
+  };
+  const onAnimate = () => (sim.playing ? sim.stop() : startAnimation());
+  // the tour starts it from outside React's render, so it needs the latest one
+  const animateRef = useRef(startAnimation);
+  useEffect(() => {
+    animateRef.current = startAnimation;
+  });
+  const tourHooks = useMemo(() => ({ animate: () => animateRef.current() }), []);
+  const { stepSeq, stepMs } = sim;
+  const travel = useMemo<Travel | null>(
+    () =>
+      model && trace && showSchedule && stepSeq !== null && pos > 0
+        ? {
+            seq: stepSeq,
+            step: trace.steps[pos - 1]!,
+            before: fillAt(model, trace, pos - 1),
+            ms: stepMs,
+          }
+        : null,
+    [model, trace, showSchedule, stepSeq, pos, stepMs],
+  );
 
   // when processes appear or disappear, pulse the new ones and re-fit;
   // derived-during-render pattern so no setState-in-effect
@@ -319,7 +418,7 @@ export function App() {
       let pos = positions;
       for (const [from, to] of renames) pos = renameKey(pos, from, to);
       const known =
-        prevModel && !heldPositions ? new Set(elkBoxes(prevModel).map((b) => b.id)) : undefined;
+        prevModel && !heldPositions ? new Set(prevModel.scene.nodes.map((n) => n.id)) : undefined;
       setPositions(placeModel(model, pos, hints, known));
     }
     if (model && heldPositions) setHeldPositions(null);
@@ -345,13 +444,42 @@ export function App() {
   const [popover, setPopover] = useState<{ target: PopoverTarget; x: number; y: number } | null>(
     null,
   );
-  // `at` is the right-click point in flow coordinates, where canvas adds land
+  // `at` is the right-click point in scene coordinates, where canvas adds land
   const [menu, setMenu] = useState<{ target: MenuTarget; x: number; y: number; at: Point } | null>(
     null,
   );
   // source whose model the next fit waits for; null when none is pending
   const pendingFit = useRef<string | null>(null);
   const exportingRef = useRef(false);
+
+  // the model on screen, for handlers and callbacks that must not go stale;
+  // updated after the diagram's effects, so a fit consults the committed model
+  const modelRef = useRef(model);
+  const viewRef = useRef(view);
+  const traceRef = useRef(trace);
+  useEffect(() => {
+    modelRef.current = model;
+    viewRef.current = view;
+    traceRef.current = trace;
+  }, [model, view, trace]);
+  useEffect(() => {
+    window.__fsd = {
+      getDoc: () => editorRef.current?.getDoc() ?? '',
+      setSource: (src) => {
+        pendingFit.current = src;
+        editorRef.current?.setSource(src);
+      },
+      scene: () => viewRef.current?.scene ?? null,
+      ir: () => modelRef.current?.ir ?? null,
+      trace: () => traceRef.current,
+      animating,
+      setMotion,
+      setCursor: (offset) => editorRef.current?.gotoOffset(offset),
+    };
+    return () => {
+      delete window.__fsd;
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', appTheme);
@@ -441,22 +569,46 @@ export function App() {
       .catch(() => setNotice({ text: `could not read ${file.name}` }));
   };
 
-  const onExportHs = () => {
+  const onExportHs = useCallback(() => {
     const doc = editorRef.current?.getDoc() ?? '';
     // stale ids kept for editor undo are not part of the file; filter only by
     // the model of this very text, else (errors, debounce) keep every position
-    const ids = new Set(model?.dg.graph.children?.map((c) => c.id));
+    const ids = new Set(model?.scene.nodes.map((n) => n.id));
     const saved =
       model?.source === doc ? new Map([...positions].filter(([id]) => ids.has(id))) : positions;
-    const url = URL.createObjectURL(
-      new Blob([writeLayoutBlock(doc, saved)], { type: 'text/x-haskell' }),
-    );
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = exportFileName(doc);
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url)); // after the download has started
+    download(writeLayoutBlock(doc, saved), exportFileName(doc), 'text/x-haskell');
     markSaved(doc);
+  }, [model, positions, markSaved]);
+
+  const onTidy = () => {
+    setFitRequest((n) => n + 1);
+    if (!positions.size) return;
+    const prev = positions;
+    const prevEdited = layoutEditedRef.current;
+    layoutEditedRef.current = true;
+    setHeldPositions(null);
+    setPositions(new Map());
+    setNotice({
+      text: 'automatic layout restored',
+      undo: () => {
+        // cleared flag: a save since Tidy wrote the tidy layout, so this differs from it
+        layoutEditedRef.current = layoutEditedRef.current ? prevEdited : true;
+        // the text may have changed since Tidy: place against the current model
+        const m = modelRef.current;
+        setPositions(m ? placeModel(m, prev, new Map()) : prev);
+        setNotice(null);
+        setFitRequest((n) => n + 1);
+      },
+    });
+  };
+
+  /** A node move landed: pin every node there (the first move pins the whole layout). */
+  const onPin = (pinned: Map<string, Point>) => {
+    // a held diagram belongs to the replaced document: pin into its map and
+    // leave the new document's positions alone until its model arrives
+    layoutEditedRef.current = true;
+    if (heldPositions) setHeldPositions((h) => h && new Map([...h, ...pinned]));
+    else setPositions((q) => new Map([...q, ...pinned]));
   };
 
   // restore the working copy once the editor is mounted, else the default example
@@ -472,15 +624,15 @@ export function App() {
   useEffect(() => {
     if (tourStarted.current || storageGet(TOUR_SEEN_KEY) || !model) return;
     tourStarted.current = true;
-    void startTour(() => storageSet(TOUR_SEEN_KEY, '1'));
-  }, [model]);
+    void startTour(() => storageSet(TOUR_SEEN_KEY, '1'), tourHooks);
+  }, [model, tourHooks]);
 
-  // consulted by the diagram after each graph update, outside render
-  // only once the model for the replaced text is on screen, not on the old
-  // model's nodes moving to the new positions
-  const consumePendingFit = useCallback(() => {
-    if (pendingFit.current === null || pendingFit.current !== modelRef.current?.source)
-      return false;
+  // consulted by the diagram after each scene change, with the source of the
+  // model it drew: only the model for the replaced text consumes the fit, not
+  // the old model's nodes moving to the new positions. (A ref to the model
+  // would lag: the diagram's effects run before App's.)
+  const consumePendingFit = useCallback((shown: string) => {
+    if (pendingFit.current === null || pendingFit.current !== shown) return false;
     pendingFit.current = null;
     return true;
   }, []);
@@ -513,123 +665,46 @@ export function App() {
     return { x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) };
   }, []);
 
-  const isValidConnection = useCallback(
-    (sourceHandle: string, targetHandle: string): boolean => {
-      if (!model) return false;
-      const sig = handleSignal(sourceHandle);
-      const parts = targetHandle.split('.');
-      if (!sig || parts[1] !== 'in' || parts[2] !== '__new') return false;
-      return addInput(model.ir, parts[0]!, sig) !== null;
-    },
-    [model],
-  );
-
-  const onConnect = useCallback(
-    (sourceHandle: string, targetHandle: string) => {
-      if (!model) return;
-      if (editorRef.current?.getDoc() !== model.source) {
-        setNotice({ text: 'diagram is stale, try again once it updates' });
+  /** Export the diagram as it is on screen (waiting out any animation), named after the module. */
+  const onExport = useCallback(
+    async (kind: ExportKind) => {
+      const wrap = paneRef.current?.querySelector<HTMLElement>('.diagram-wrap');
+      if (!model || !wrap) {
+        setNotice({ text: 'nothing to export yet' });
         return;
       }
-      const sig = handleSignal(sourceHandle);
-      const proc = targetHandle.split('.')[0];
-      if (!sig || !proc) return;
-      const splices = addInput(model.ir, proc, sig);
-      if (splices) editorRef.current?.applySplices(splices);
-    },
-    [model],
-  );
-
-  // ponytail: html-to-image deep-clones SVG subtrees without inlining computed
-  // paint, so ancestor-scoped fill/stroke rules arrive blank at the rasterizer
-  // (black nodes); pin the live values for the snapshot, then restore.
-  const onExportPng = useCallback(() => {
-    if (exportingRef.current) {
-      setNotice({ text: 'export in progress' });
-      return;
-    }
-    const el = paneRef.current;
-    if (!el) {
-      setNotice({ text: 'nothing to export yet' });
-      return;
-    }
-    exportingRef.current = true;
-    const saved: Array<[CSSStyleDeclaration, string, string]> = [];
-    const restore = () => {
-      for (const [style, prop, prior] of saved) {
-        if (prior) style.setProperty(prop, prior);
-        else style.removeProperty(prop);
+      if (kind === 'hs') return onExportHs();
+      if (exportingRef.current) {
+        setNotice({ text: 'export in progress' });
+        return;
       }
-    };
-    try {
-      const pin = (selector: string, props: string[]) => {
-        el.querySelectorAll<SVGGraphicsElement>(selector).forEach((node) => {
-          const computed = getComputedStyle(node);
-          props.forEach((prop) => {
-            saved.push([node.style, prop, node.style.getPropertyValue(prop)]);
-            node.style.setProperty(prop, computed.getPropertyValue(prop));
-          });
-        });
+      exportingRef.current = true;
+      const name = /^module\s+([\w.']+)/m.exec(model.source)?.[1] ?? 'diagram';
+      const ctx = {
+        style: diagramTheme,
+        tokens: new Map(model.ir.processes.filter(isDelay).map((d) => [d.name, d.tokens.length])),
       };
-      pin('circle.node-shape', ['fill', 'stroke']);
-      pin('.react-flow__edge-path', ['stroke']);
-      pin('#fsd-arrow .arrow-head', ['fill']);
-    } catch {
-      restore();
-      exportingRef.current = false;
-      setNotice({ text: 'export failed' });
-      return;
-    }
-    void toPng(el, {
-      filter: (n) =>
-        !(n instanceof Element) ||
-        (!n.classList?.contains('react-flow__minimap') &&
-          !n.classList?.contains('react-flow__controls') &&
-          !n.classList?.contains('react-flow__attribution') &&
-          !n.classList?.contains('float-controls') &&
-          !n.classList?.contains('legend') &&
-          !n.classList?.contains('popover') &&
-          !n.classList?.contains('schedule-panel') &&
-          !n.classList?.contains('schedule-chip') &&
-          !n.classList?.contains('status-chip') &&
-          !n.classList?.contains('sched-banner') &&
-          !n.classList?.contains('notice-toast') &&
-          !n.classList?.contains('empty-canvas')),
-    })
-      .then((url) => {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'diagram.png';
-        a.click();
-      })
-      .catch(() => setNotice({ text: 'export failed' }))
-      .finally(() => {
-        restore();
+      const scene = (view ?? model).scene;
+      const svg = () => sceneToSvg(wrap, scene.bounds);
+      try {
+        if (kind === 'png') download(await svgToPngBlob(await svg()), `${name}.png`);
+        else if (kind === 'svg') download(await svg(), `${name}.svg`, 'image/svg+xml');
+        else if (kind === 'tikz')
+          download(sceneToTikz(scene, ctx), `${name}.tex`, 'application/x-tex');
+        else {
+          await navigator.clipboard.writeText(tikzPicture(scene, ctx));
+          setNotice({
+            text: 'TikZ picture copied: needs \\usepackage{tikz} and \\usetikzlibrary{arrows.meta}',
+          });
+        }
+      } catch {
+        setNotice({ text: 'export failed' });
+      } finally {
         exportingRef.current = false;
-      });
-  }, []);
-
-  const onTidy = () => {
-    setFitRequest((n) => n + 1);
-    if (!positions.size) return;
-    const prev = positions;
-    const prevEdited = layoutEditedRef.current;
-    layoutEditedRef.current = true;
-    setHeldPositions(null);
-    setPositions(new Map());
-    setNotice({
-      text: 'automatic layout restored',
-      undo: () => {
-        // cleared flag: a save since Tidy wrote the tidy layout, so this differs from it
-        layoutEditedRef.current = layoutEditedRef.current ? prevEdited : true;
-        // the text may have changed since Tidy: place against the current model
-        const m = modelRef.current;
-        setPositions(m ? placeModel(m, prev, new Map()) : prev);
-        setNotice(null);
-        setFitRequest((n) => n + 1);
-      },
-    });
-  };
+      }
+    },
+    [model, view, diagramTheme, onExportHs],
+  );
 
   const onAddDelay = () => {
     setNotice({ text: 'a delay needs a signal: drag the delay chip onto an edge' });
@@ -652,20 +727,41 @@ export function App() {
         return;
       }
       if (edgeId) {
-        const meta = model.dg.edgeMeta.get(edgeId);
-        if (!meta) return;
-        const r = insertOnEdge(model.source, model.ir, meta.sig, kind);
+        const sig = model.edgeSignals.get(edgeId);
+        if (!sig) return;
+        const r = insertOnEdge(model.source, model.ir, sig, kind);
         setHints((h) => new Map(h).set(r.created[0]!, at));
         queueRenames(outputRenames(model.ir, r.splices));
         editorRef.current?.applySplices(r.splices);
       } else if (kind === 'actor') {
-        // dropped on empty canvas: a source actor; a floating delay has no valid text form
+        // dropped on empty canvas: a source actor, where it was dropped
         const r = addSourceActor(model.source, model.ir);
         setHints((h) => new Map([...h, ...sourceActorHints(r.created, at)]));
         editorRef.current?.applySplices(r.splices);
+      } else {
+        // a floating delay has no valid text form
+        setNotice({ text: 'a delay needs a signal: drop the delay chip onto an edge' });
       }
     },
     [model, queueRenames],
+  );
+
+  // drag-to-connect: a refused connection explains itself instead of doing nothing
+  const onConnect = useCallback(
+    (signal: string, proc: string) => {
+      if (!model) return;
+      if (editorRef.current?.getDoc() !== model.source) {
+        setNotice({ text: 'diagram is stale, try again once it updates' });
+        return;
+      }
+      const splices = addInput(model.ir, proc, signal);
+      if (splices) editorRef.current?.applySplices(splices);
+      else
+        setNotice({
+          text: addInputError(model.ir, proc, signal) ?? 'connection not possible here',
+        });
+    },
+    [model],
   );
 
   /** Menu shortcut into the popover: same targets, actions inline, same staleness guard. */
@@ -691,18 +787,18 @@ export function App() {
         return;
       }
       if (menu.target.kind === 'edge') {
-        const meta = model.dg.edgeMeta.get(menu.target.edgeId);
+        const sig = model.edgeSignals.get(menu.target.edgeId);
         if (action === 'insert-actor' || action === 'insert-delay') {
-          if (!meta) return;
+          if (!sig) return;
           const kind = action === 'insert-actor' ? 'actor' : 'delay';
-          const r = insertOnEdge(model.source, model.ir, meta.sig, kind);
-          const mid = edgeMidpoint(model.dg.graph, menu.target.edgeId, positions);
+          const r = insertOnEdge(model.source, model.ir, sig, kind);
+          const mid = view && edgeMidpoint(view.scene, menu.target.edgeId);
           if (mid) setHints((h) => new Map(h).set(r.created[0]!, mid));
           queueRenames(outputRenames(model.ir, r.splices));
           editor.applySplices(r.splices);
           setMenu(null);
         } else if (action === 'rename-signal') {
-          if (!meta) return;
+          if (!sig) return;
           setMenu(null);
           setPopover({
             target: { kind: 'edge', edgeId: menu.target.edgeId },
@@ -723,8 +819,8 @@ export function App() {
       if (action === 'delete') {
         const splices = deleteProcess(model.ir, p.name);
         if (splices) {
-          queueRenames(outputRenames(model.ir, splices));
           setMenu(null);
+          queueRenames(outputRenames(model.ir, splices));
           editor.applySplices(splices);
         }
         return;
@@ -740,67 +836,65 @@ export function App() {
         return;
       }
       // rename / rates / function / tokens: open the popover pre-focused at the same spot
-      if (action === 'rename' || action === 'rates' || action === 'function' || action === 'tokens') {
+      if (
+        action === 'rename' ||
+        action === 'rates' ||
+        action === 'function' ||
+        action === 'tokens'
+      ) {
         setMenu(null);
         setPopover({ target: { kind: 'node', name: p.name }, x: menu.x, y: menu.y });
       }
     },
-    [model, menu, positions, queueRenames],
+    [model, menu, view, queueRenames],
   );
 
   const onContextMenu = useCallback(
-    (target: MenuTarget, cx: number, cy: number, at: Point) => {
-      if (target.kind === 'node' && target.name === '') return;
+    (target: SceneTarget, cx: number, cy: number, at: Point) => {
       setPopover(null);
-      setMenu({ target, at, ...paneCoords(cx, cy) });
+      setMenu({
+        target: target.kind === 'edge' ? { ...target, signalName: '' } : target,
+        at,
+        ...paneCoords(cx, cy),
+      });
     },
     [paneCoords],
   );
 
-  const onConnectRefused = useCallback(
-    (sourceHandle: string, targetHandle: string) => {
-      if (!model) return;
-      const sig = handleSignal(sourceHandle);
-      const proc = targetHandle.split('.')[0];
-      if (!sig || !proc) return;
-      setNotice({ text: addInputError(model.ir, proc, sig) ?? 'connection not possible here' });
-    },
-    [model],
-  );
-
   // the rank error on a disconnected graph teaches the wrong concept
   let schedError = pipe.schedule && !pipe.schedule.ok ? pipe.schedule.message : null;
-  if (schedError && pipe.schedule && !pipe.schedule.ok && pipe.schedule.kind === 'rank' && model) {
-    const parts = componentCount(model.ir);
-    if (parts > 1)
-      schedError = `the graph has ${parts} disconnected parts; every process must be connected to the rest of the system before a schedule exists`;
-  }
+  if (
+    schedError &&
+    pipe.schedule &&
+    !pipe.schedule.ok &&
+    pipe.schedule.kind === 'rank' &&
+    parts > 1
+  )
+    schedError = `the graph has ${parts} disconnected parts; every process must be connected to the rest of the system before a schedule exists`;
 
   return (
     <div className="app">
       <Toolbar
         example={example}
         onExample={loadExample}
-        onNew={onNew}
-        onOpen={onOpen}
-        onExportHs={onExportHs}
         onFit={() => setFitRequest((n) => n + 1)}
-        onTidy={onTidy}
         showSchedule={showSchedule}
         onToggleSchedule={() => setShowSchedule((v) => !v)}
         onAddActor={onAddActor}
         onAddDelay={onAddDelay}
-        onExportPng={onExportPng}
-        onTour={() => void startTour(() => storageSet(TOUR_SEEN_KEY, '1'))}
+        onExport={(k) => void onExport(k)}
+        onNew={onNew}
+        onOpen={onOpen}
+        onTidy={onTidy}
+        onTour={() => void startTour(() => storageSet(TOUR_SEEN_KEY, '1'), tourHooks)}
+        animating={sim.playing}
+        canAnimate={!!trace}
+        onAnimate={onAnimate}
         diagramTheme={diagramTheme}
         onToggleDiagramTheme={() => setDiagramTheme((t) => (t === 'modern' ? 'lecture' : 'modern'))}
         onToggleAppTheme={() => setAppTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
       />
-      <main
-        className="panes"
-        ref={panesRef}
-        style={{ ['--split' as string]: splitRatio }}
-      >
+      <main className="panes" ref={panesRef} style={{ ['--split' as string]: splitRatio }}>
         <section className="pane editor-pane">
           <ErrorBar
             diagnostics={pipe.diagnostics}
@@ -809,6 +903,7 @@ export function App() {
           <EditorPane
             ref={editorRef}
             onChange={setSource}
+            onCursor={setCursor}
             diagnostics={pipe.diagnostics}
             dark={appTheme === 'dark'}
           />
@@ -823,11 +918,20 @@ export function App() {
           className={`pane diagram-pane diagram-${diagramTheme}${showSchedule ? '' : ' schedule-off'}`}
           ref={paneRef}
         >
-          <DiagramPane
-            dg={model?.dg ?? null}
-            showUnitRates={showUnitRates}
+          <SceneView
+            linked={linked}
+            onHoverTarget={onHoverTarget}
+            onJump={onJump}
+            onInlineEdit={onInlineEdit}
+            onPin={onPin}
+            model={view}
+            style={diagramTheme}
+            flags={flags}
+            schedule={showSchedule}
             stale={pipe.stale}
-            showFlags={showFlags}
+            marks={marks}
+            travel={travel}
+            flash={flash}
             fitRequest={fitRequest}
             consumePendingFit={consumePendingFit}
             onNodeClick={(id, cx, cy) => {
@@ -844,19 +948,8 @@ export function App() {
               setMenu(null);
             }}
             onContextMenu={onContextMenu}
-            onConnect={onConnect}
-            isValidConnection={isValidConnection}
             onDropInsert={onDropInsert}
-            onConnectRefused={onConnectRefused}
-            flash={flash}
-            positions={heldPositions ?? positions}
-            onPin={(pinned) => {
-              // a held diagram belongs to the replaced document: pin into its map and
-              // leave the new document's positions alone until its model arrives
-              layoutEditedRef.current = true;
-              if (heldPositions) setHeldPositions((h) => h && new Map([...h, ...pinned]));
-              else setPositions((p) => new Map([...p, ...pinned]));
-            }}
+            onConnect={onConnect}
           />
           <div className="float-controls">
             <span className="detail-switch" title="Toggle each annotation on the diagram">
@@ -890,7 +983,7 @@ export function App() {
               legend
             </button>
           </div>
-          {legendOpen && <Legend />}
+          {legendOpen && <Legend style={diagramTheme} />}
           {popover && model && (
             <EditPopover
               target={popover.target}
@@ -901,8 +994,8 @@ export function App() {
               onClose={() => setPopover(null)}
               onInserted={(proc) => {
                 const mid =
-                  popover.target.kind === 'edge'
-                    ? edgeMidpoint(model.dg.graph, popover.target.edgeId, positions)
+                  popover.target.kind === 'edge' && view
+                    ? edgeMidpoint(view.scene, popover.target.edgeId)
                     : null;
                 if (mid) setHints((h) => new Map(h).set(proc, mid));
               }}
@@ -918,7 +1011,7 @@ export function App() {
                   ? {
                       kind: 'edge',
                       edgeId: menu.target.edgeId,
-                      signalName: model.dg.edgeMeta.get(menu.target.edgeId)?.sig.name ?? '',
+                      signalName: model.edgeSignals.get(menu.target.edgeId)?.name ?? '',
                     }
                   : menu.target,
                 model.ir,
@@ -932,16 +1025,22 @@ export function App() {
               Showing last valid diagram: {pipe.errorCount} error{pipe.errorCount === 1 ? '' : 's'}
             </div>
           )}
-          {schedError && <div className="sched-banner">Not schedulable: {schedError}</div>}
+          {schedError && (
+            <div className="sched-banner">
+              <div>Not schedulable: {schedError}</div>
+              {stuckLine(stuck) && <div className="sched-detail">{stuckLine(stuck)}</div>}
+            </div>
+          )}
           {notice && (
             <div className="notice-toast">
               {notice.text}
               {notice.undo && <button onClick={notice.undo}>Undo</button>}
             </div>
           )}
-          {showSchedule && pipe.schedule?.ok && (
-            <SchedulePanel
-              sched={pipe.schedule}
+          {showSchedule && trace && (
+            <Timeline
+              sched={pipe.schedule?.ok ? pipe.schedule : null}
+              sim={sim}
               open={scheduleOpen}
               onToggle={() => setScheduleOpen((v) => !v)}
             />

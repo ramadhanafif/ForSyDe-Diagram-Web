@@ -10,8 +10,9 @@ import {
   setTokens,
   type Splice,
 } from '../core/edits';
+import { parseInts, parseTokens } from '../core/inlineEdit';
 import { isDelay, type IRProcess, type IRSignal } from '../core/ir';
-import type { ModelState } from '../app/usePipeline';
+import type { SceneModel } from '../app/useScene';
 import type { EditorApi } from '../editor/EditorPane';
 import { findDefinitionOffset } from './labels';
 
@@ -24,26 +25,13 @@ interface Props {
   target: PopoverTarget;
   x: number;
   y: number;
-  model: ModelState;
+  model: SceneModel;
   editorRef: React.RefObject<EditorApi | null>;
   onClose(): void;
   /** A process was inserted on the target edge (before its splices apply). */
-  onInserted(proc: string): void;
+  onInserted?(proc: string): void;
   /** A process or signal is being renamed; the layout carries its position. */
-  onRenamed(oldId: string, newId: string): void;
-}
-
-function parseInts(text: string): number[] | null {
-  const parts = text.split(',').map((t) => t.trim());
-  if (parts.some((p) => !/^-?\d+$/.test(p))) return null;
-  return parts.map(Number);
-}
-
-/** Delay initial tokens: non-negative numbers, floats allowed. */
-function parseTokens(text: string): number[] | null {
-  const parts = text.split(',').map((t) => t.trim());
-  if (parts.some((p) => !/^-?\d+(\.\d+)?$/.test(p))) return null;
-  return parts.map(Number);
+  onRenamed?(oldId: string, newId: string): void;
 }
 
 export function EditPopover({
@@ -67,7 +55,10 @@ export function EditPopover({
     if (!el || !pane) return;
     setPos({
       x: Math.max(POPOVER_MARGIN, Math.min(x, pane.clientWidth - el.offsetWidth - POPOVER_MARGIN)),
-      y: Math.max(POPOVER_MARGIN, Math.min(y, pane.clientHeight - el.offsetHeight - POPOVER_MARGIN)),
+      y: Math.max(
+        POPOVER_MARGIN,
+        Math.min(y, pane.clientHeight - el.offsetHeight - POPOVER_MARGIN),
+      ),
     });
   }, [x, y]);
 
@@ -90,11 +81,11 @@ export function EditPopover({
 
   let body: React.ReactNode = null;
   if (target.kind === 'edge') {
-    const meta = model.dg.edgeMeta.get(target.edgeId);
-    if (meta)
+    const sig = model.edgeSignals.get(target.edgeId);
+    if (sig)
       body = (
         <EdgeBody
-          sig={meta.sig}
+          sig={sig}
           model={model}
           apply={apply}
           onInserted={onInserted}
@@ -142,24 +133,25 @@ function EdgeBody({
   onRenamed,
 }: {
   sig: IRSignal;
-  model: ModelState;
+  model: SceneModel;
   apply: Apply;
-  onInserted(proc: string): void;
-  onRenamed(oldId: string, newId: string): void;
+  onInserted?(proc: string): void;
+  onRenamed?(oldId: string, newId: string): void;
 }) {
   const [name, setName] = useState(sig.name);
   const applyRename = () =>
     apply(() => {
       const splices = renameSignal(model.source, model.ir, sig.name, name.trim());
       if (!splices) return 'name taken or invalid';
-      onRenamed(sig.name, name.trim());
+      onRenamed?.(sig.name, name.trim());
       return splices;
     });
+  // an insert lands at the edge's middle, and an output it rewires keeps its spot
   const insert = (kind: 'actor' | 'delay') =>
     apply(() => {
       const r = insertOnEdge(model.source, model.ir, sig, kind);
-      onInserted(r.created[0]!);
-      for (const [a, b] of outputRenames(model.ir, r.splices)) onRenamed(a, b);
+      onInserted?.(r.created[0]!);
+      for (const [a, b] of outputRenames(model.ir, r.splices)) onRenamed?.(a, b);
       return r.splices;
     });
   return (
@@ -172,16 +164,10 @@ function EdgeBody({
       <div className="pop-title">signal {sig.name}</div>
       <label className="row">
         <span>insert</span>
-        <button
-          type="button"
-          onClick={() => insert('actor')}
-        >
+        <button type="button" onClick={() => insert('actor')}>
           actor
         </button>
-        <button
-          type="button"
-          onClick={() => insert('delay')}
-        >
+        <button type="button" onClick={() => insert('delay')}>
           delay
         </button>
       </label>
@@ -208,11 +194,11 @@ function NodeBody({
   onRenamed,
 }: {
   p: IRProcess;
-  model: ModelState;
+  model: SceneModel;
   apply: Apply;
   editorRef: React.RefObject<EditorApi | null>;
   onClose(): void;
-  onRenamed(oldId: string, newId: string): void;
+  onRenamed?(oldId: string, newId: string): void;
 }) {
   const delay = isDelay(p);
   const [name, setName] = useState(p.name);
@@ -262,7 +248,7 @@ function NodeBody({
     apply(() => {
       const r = buildSplices();
       if (r.error) return r.error;
-      if (name.trim() !== p.name) onRenamed(p.name, name.trim());
+      if (name.trim() !== p.name) onRenamed?.(p.name, name.trim());
       return r.splices;
     });
 
@@ -334,7 +320,8 @@ function NodeBody({
             apply(() => {
               const splices = deleteProcess(model.ir, p.name);
               if (!splices) return 'only single-input single-output processes can be deleted here';
-              for (const [a, b] of outputRenames(model.ir, splices)) onRenamed(a, b);
+              // an output rewired to the deleted process's input keeps its spot
+              for (const [a, b] of outputRenames(model.ir, splices)) onRenamed?.(a, b);
               return splices;
             });
           }}

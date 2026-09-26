@@ -109,9 +109,17 @@ body {
   overflow: hidden;
 }
 
+/* the diagram above, the schedule timeline docked below it */
 .diagram-pane {
   position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
+}
+
+.diagram-pane > .diagram-wrap {
+  flex: 1;
+  min-height: 0;
 }
 
 .editor-pane {
@@ -150,6 +158,55 @@ body {
   color: var(--accent);
 }
 
+/* Export: a native disclosure, its items dropping below the toolbar */
+.export-menu {
+  position: relative;
+}
+
+.export-menu summary {
+  list-style: none;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.export-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.export-menu summary::after {
+  content: ' ▾';
+  color: var(--fg-dim);
+}
+
+.export-menu [role='menu'] {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+}
+
+.toolbar .export-menu [role='menuitem'] {
+  border-color: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.toolbar .export-menu [role='menuitem']:hover {
+  border-color: var(--accent);
+}
+
 .palette {
   display: flex;
   gap: 4px;
@@ -167,11 +224,6 @@ body {
   cursor: grabbing;
 }
 
-.react-flow__edge.drop-target .react-flow__edge-path {
-  stroke: var(--accent);
-  stroke-width: 2.5;
-}
-
 .editor-host {
   height: 100%;
 }
@@ -180,8 +232,14 @@ body {
 /* diagram shared structure                                            */
 
 .diagram-wrap {
+  position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  /* pan and pinch are ours; the browser must not scroll or zoom the page */
+  touch-action: none;
+  user-select: none;
 }
 
 .diagram-wrap.stale {
@@ -189,189 +247,334 @@ body {
   filter: saturate(0.4);
 }
 
-.react-flow {
-  background: var(--bg);
-}
-
-.fsd-node {
-  position: relative;
-}
-
-.node-svg {
+.scene-viewport {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.scene-svg {
+  position: absolute;
   overflow: visible;
 }
 
-.process-name {
+.scene-labels {
   position: absolute;
   left: 0;
-  right: 0;
-  top: -24px;
-  text-align: center;
-  white-space: nowrap;
-  font-size: 14px;
-}
-
-.node-badge {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--accent);
-  margin-left: 6px;
-}
-
-.stack {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  line-height: 14px;
+  top: 0;
   pointer-events: none;
 }
 
-.stack-line {
-  font-size: 12px;
-}
-
-.stack-rates {
-  font-size: 11px;
-}
-
-.io-label {
+.scene-label,
+.io-label,
+.system-label {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
+  text-align: center;
   white-space: nowrap;
+  color: var(--fg);
 }
 
-.rate-label {
-  font-size: 10.5px;
-  fill: var(--fg);
+.scene-label,
+.io-label {
+  cursor: pointer;
+  pointer-events: auto;
+  /* layout transitions map the settled box onto the in-between one */
+  transform-origin: 0 0;
 }
 
-.signal-label {
-  font-size: 13px;
-  fill: var(--fg);
+/* shallower than vertical-align: sub, so the subscript stays clear of the edge below */
+.scene-labels sub {
+  font-size: 75%;
+  line-height: 0;
+  vertical-align: -0.2em;
 }
 
-.buffer-label {
-  font-size: 10px;
-  font-style: normal;
-  fill: var(--fg-dim);
+.system-label {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.system-boundary {
+  fill: none;
+  stroke: var(--fg-dim);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.label-badge {
+  color: var(--accent);
+}
+
+.label-buffer {
+  color: var(--fg-dim);
+}
+
+/* nodes */
+.scene-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.node-shape {
+  stroke-width: 1.25;
+}
+
+.scene-port {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 1;
+}
+
+.new-input-handle {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 1.5;
+}
+
+/* drag to connect: out ports and io handles are sources, actors the targets */
+.scene-port,
+.io-handle {
+  cursor: crosshair;
+}
+
+/* a node body drags to move it (and pin the layout) */
+.scene-node .node-body {
+  cursor: grab;
+}
+
+.io-handle {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.io-handle:hover {
+  fill: var(--accent);
+}
+
+.connect-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connect-line line {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+
+.diagram-wrap.connecting .scene-node.connect-invalid {
+  opacity: 0.35;
+}
+
+.diagram-wrap.connecting .scene-node.connect-valid .new-input-handle {
+  opacity: 1;
+  fill: var(--accent);
+}
+
+.diagram-wrap.connecting .scene-node.connect-valid.connect-over .node-shape {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+/* edges: a wide transparent hit path under the visible line */
+.scene-edge {
+  cursor: pointer;
+}
+
+.edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+}
+
+.edge-line {
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 1;
+  pointer-events: none;
 }
 
 .arrow-head {
   fill: var(--fg);
 }
 
-.system-boundary-box {
-  border: 1px dashed var(--fg-dim);
-  pointer-events: none;
-}
-
-.system-label {
-  font-size: 12px;
-  color: var(--fg-dim);
-  pointer-events: none;
-}
-
-.react-flow__edge .react-flow__edge-path {
-  stroke: var(--fg);
-  stroke-width: 1;
-  fill: none;
-}
-
-.react-flow__edge {
-  cursor: pointer;
-}
-
-.react-flow__edge:hover .react-flow__edge-path {
+.scene-edge.hover .edge-line,
+.scene-edge.selected .edge-line {
   stroke: var(--accent);
 }
 
-/* minimap */
-.react-flow__minimap {
-  background: var(--bg-panel);
+/* what the editor cursor is on: a soft accent halo, distinct from selection */
+.scene-node.linked .node-shape {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px var(--accent));
 }
 
-.react-flow__minimap-mask {
-  fill: color-mix(in srgb, var(--fg-dim) 12%, transparent);
+.scene-edge.linked .edge-line {
+  stroke: var(--accent);
+  stroke-width: 2.5;
 }
 
-.mm-actor {
-  fill: var(--actor-fill-modern);
+/* in the editor: the source of what the pointer is on in the diagram */
+.cm-editor .cm-linked {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-.mm-delay {
-  fill: var(--delay-fill-modern);
+.scene-edge.drop-target .edge-line {
+  stroke: var(--accent);
+  stroke-width: 2.5;
 }
 
-.mm-io {
-  fill: var(--io-fill-modern);
+/* what the SHOW toggles keep off the diagram, for the hovered element */
+/*
+ * semantic zoom: zoomed out, fine print is unreadable, so it goes (the hover
+ * card lists it). visibility keeps every box where the layout put it.
+ */
+.scene-viewport.lod-mid :is(.label-rate, .label-buffer, .label-stack, .label-badge),
+.scene-viewport.lod-mid .buffer-strip,
+.scene-viewport.lod-far :is(.label-rate, .label-buffer, .label-stack, .label-badge),
+.scene-viewport.lod-far :is(.label-signal, .buffer-strip, .scene-port) {
+  visibility: hidden;
 }
 
-/* handles */
-.react-flow__handle {
-  width: 7px;
-  height: 7px;
-  border: 1px solid var(--bg);
-  background: var(--accent);
-  border-radius: 50%;
+/* an edit in place over the label it edits */
+.inline-edit {
+  position: absolute;
+  z-index: 8;
+  transform: translate(-8px, -3px);
 }
 
-.new-input-handle.react-flow__handle {
+.inline-edit input {
+  box-sizing: border-box;
+  padding: 2px 7px;
+  border: 1.5px solid var(--accent);
+  border-radius: 5px;
   background: var(--bg);
-  border: 1.5px dashed var(--accent);
-  width: 9px;
-  height: 9px;
-  top: 50%;
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  font:
+    600 12px ui-monospace,
+    monospace;
+  outline: none;
+}
+
+.inline-edit input[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+.inline-edit-error {
+  margin-top: 3px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--bg-panel);
+  border: 1px solid var(--error);
+  color: var(--error);
+  font:
+    11px ui-sans-serif,
+    system-ui,
+    sans-serif;
+  white-space: nowrap;
+}
+
+.hover-card {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, 8px);
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.zoom-controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.zoom-controls button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--fg);
+  font:
+    15px/1 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+
+.zoom-controls button:last-child {
+  border-bottom: none;
+}
+
+.zoom-controls button:hover {
+  color: var(--accent);
 }
 
 /* ------------------------------------------------------------------ */
 /* modern theme (default)                                              */
 
-.diagram-modern .react-flow {
-  font-family: ui-sans-serif, system-ui, sans-serif;
-}
-
-.diagram-modern .node-shape {
-  stroke-width: 1.25;
-}
-
-.diagram-modern .actor .node-shape {
+.diagram-modern .kind-actor .node-shape {
   fill: var(--actor-fill-modern);
   stroke: var(--actor-stroke-modern);
 }
 
-.diagram-modern .delay .node-shape {
+.diagram-modern .kind-delay .node-shape {
   fill: var(--delay-fill-modern);
   stroke: var(--delay-stroke-modern);
 }
 
-.diagram-modern .fsd-node.actor,
-.diagram-modern .fsd-node.delay {
+.diagram-modern .kind-io .node-shape {
+  fill: var(--io-fill-modern);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.diagram-modern .scene-node.kind-actor,
+.diagram-modern .scene-node.kind-delay {
   filter: drop-shadow(var(--shadow));
   transition: filter 0.12s;
 }
 
-.diagram-modern .fsd-node.actor:hover,
-.diagram-modern .fsd-node.delay:hover {
+.diagram-modern .scene-node.kind-actor.hover,
+.diagram-modern .scene-node.kind-delay.hover {
   filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.25));
 }
 
-.diagram-modern .process-name {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.diagram-modern .stack-line {
-  font-size: 11px;
-  color: var(--fg);
+.diagram-modern .scene-node.selected .node-shape,
+.diagram-modern .scene-node:focus-visible .node-shape {
+  stroke: var(--accent);
+  stroke-width: 2;
 }
 
 .diagram-modern .stack-ctor {
@@ -379,118 +582,40 @@ body {
   font-size: 10px;
 }
 
-.diagram-modern .stack-rates {
-  color: var(--fg-dim);
-}
-
-.diagram-modern .fsd-node.io .io-label {
-  background: var(--io-fill-modern);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 1px 10px;
-}
-
-.diagram-modern .react-flow__edge .react-flow__edge-path {
+.diagram-modern .edge-line {
   stroke: var(--edge);
   stroke-width: 1.5;
   stroke-linejoin: round;
 }
 
-.diagram-modern .react-flow__edge:hover .react-flow__edge-path,
-.diagram-modern .react-flow__edge.selected .react-flow__edge-path {
+.diagram-modern .scene-edge.hover .edge-line,
+.diagram-modern .scene-edge.selected .edge-line {
   stroke: var(--accent);
 }
 
-.diagram-modern .signal-label {
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-/* number species are color coded in the modern style, matching the legend */
-.diagram-modern .rate-label {
-  font-size: 10px;
-  fill: var(--rate-fg);
-  font-weight: 600;
-}
-
-.diagram-modern .buffer-label {
-  fill: var(--buffer-fg);
-  font-weight: 600;
-}
-
-.diagram-modern .stack-rates {
-  color: var(--rate-fg);
-}
-
-/* buffer marker: terse dot in lecture style, verbose "buf n" in modern */
-.buffer-verbose {
-  display: none;
-}
-
-.diagram-modern .buffer-verbose {
-  display: inline;
-}
-
-.diagram-modern .buffer-dot {
-  display: none;
+.diagram-modern .scene-edge.drop-target .edge-line {
+  stroke: var(--accent);
+  stroke-width: 2.5;
 }
 
 .diagram-modern .arrow-head {
   fill: var(--edge);
 }
 
-.diagram-modern .system-boundary-box {
-  border: 1.5px dashed var(--border);
-  border-radius: 12px;
+/* number species are color coded in the modern style, matching the legend */
+.diagram-modern .label-rate {
+  color: var(--rate-fg);
 }
 
-/* ------------------------------------------------------------------ */
-/* progressive disclosure: one explicit toggle per annotation kind,
-   driven by the floating "show" switch. Hover or selection reveals
-   full detail on that element regardless of the toggles. */
-
-.hide-signals .sig-name {
-  display: none;
+.diagram-modern .label-buffer {
+  color: var(--buffer-fg);
 }
 
-.hide-rates .rate-label,
-.hide-rates .stack-rates {
-  display: none;
-}
-
-.hide-buffers .buffer-label {
-  display: none;
-}
-
-.hide-repetitions .node-badge {
-  display: none;
-}
-
-.hide-constructors .stack-ctor {
-  display: none;
-}
-
-.hide-functions .stack-fn {
-  display: none;
-}
-
-.fsd-node:hover .stack-line,
-.react-flow__node.selected .stack-line {
-  display: block;
-}
-
-.fsd-node:hover .node-badge,
-.react-flow__node.selected .node-badge {
-  display: inline;
-}
-
-.react-flow__edge:hover .sig-name,
-.react-flow__edge.selected .sig-name,
-.react-flow__edge:hover .rate-label,
-.react-flow__edge.selected .rate-label,
-.react-flow__edge:hover .buffer-label,
-.react-flow__edge.selected .buffer-label {
-  display: inline;
+.diagram-modern .system-boundary {
+  stroke: var(--border);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  rx: 12px;
 }
 
 /* floating controls on the diagram side */
@@ -655,54 +780,51 @@ body {
 /* ------------------------------------------------------------------ */
 /* lecture theme: the ForSyDe lecture-notes / TikZ figure style        */
 
-.diagram-lecture .react-flow {
-  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
-}
-
 .diagram-lecture .node-shape {
   stroke-width: 1.2;
   stroke: var(--fg);
 }
 
-.diagram-lecture .actor .node-shape {
+.diagram-lecture .kind-actor .node-shape {
   fill: var(--node-fill);
 }
 
-.diagram-lecture .delay .node-shape {
+.diagram-lecture .kind-delay .node-shape {
   fill: var(--delay-fill);
 }
 
-.diagram-lecture .fsd-node:hover .node-shape {
-  stroke-width: 2;
+/* io signals are bare italic names; the pill stays as a click target */
+.diagram-lecture .kind-io .node-shape {
+  fill: transparent;
+  stroke: none;
 }
 
-.diagram-lecture .process-name,
-.diagram-lecture .stack-ctor,
-.diagram-lecture .stack-fn,
-.diagram-lecture .stack-tokens,
-.diagram-lecture .io-label,
-.diagram-lecture .signal-label {
+.diagram-lecture .io-label {
   font-style: italic;
 }
 
-.diagram-lecture .signal-label {
-  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
+.diagram-lecture .system-label {
+  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, serif;
 }
 
-.diagram-lecture .rate-label {
-  font-family: 'Latin Modern Roman', 'Computer Modern', Georgia, 'Times New Roman', serif;
+.diagram-lecture .scene-node.hover .node-shape {
+  stroke-width: 2;
 }
 
-.diagram-lecture .react-flow__handle {
+.diagram-lecture .scene-node.selected .node-shape,
+.diagram-lecture .scene-node:focus-visible .node-shape {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.diagram-lecture .scene-port,
+.diagram-lecture .new-input-handle {
   opacity: 0;
 }
 
-.diagram-lecture .new-input-handle.react-flow__handle {
-  opacity: 0;
-}
-
-.diagram-lecture .react-flow__minimap {
-  display: none;
+.diagram-lecture .scene-node.hover .scene-port,
+.diagram-lecture .scene-node.hover .new-input-handle {
+  opacity: 1;
 }
 
 /* legend swatches match the lecture palette when that style is active */
@@ -721,42 +843,305 @@ body {
   border: none;
 }
 
-/* schedule toggle hides all schedule-derived annotations; hard off switch
-   that must also beat the hover-reveal rules below */
-.schedule-off .node-badge,
-.schedule-off .buffer-label {
-  display: none !important;
+/* ------------------------------------------------------------------ */
+/* FIFO strips (modern): buffers on edges, delays as their tokens      */
+
+.fifo-outline {
+  fill: var(--bg);
+  stroke: var(--buffer-fg);
+  stroke-width: 1;
 }
 
-.schedule-panel {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+.fifo-slot,
+.fifo-bar {
+  fill: none;
+  stroke: var(--buffer-fg);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.fifo-slot.filled,
+.fifo-bar-fill {
+  fill: var(--buffer-fg);
+  opacity: 1;
+}
+
+.fifo-count {
+  fill: var(--buffer-fg);
+  font:
+    600 10px ui-sans-serif,
+    system-ui,
+    sans-serif;
+  dominant-baseline: central;
+}
+
+.buffer-strip {
+  cursor: pointer;
+}
+
+/* a delay's initial tokens sit in its own strip, in the delay colours */
+.kind-delay .fifo-slot,
+.kind-delay .fifo-bar {
+  stroke: var(--delay-stroke-modern);
+  opacity: 1;
+}
+
+.kind-delay .fifo-slot.filled,
+.kind-delay .fifo-bar-fill {
+  fill: var(--delay-stroke-modern);
+}
+
+.kind-delay .fifo-count {
+  fill: var(--fg);
+}
+
+/* ------------------------------------------------------------------ */
+/* simulation marks: playback step and failure views                   */
+
+/* tokens travelling along edges during playback */
+.token-layer {
+  pointer-events: none;
+}
+
+.token {
+  fill: var(--buffer-fg);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+
+.token-count {
+  fill: var(--buffer-fg);
+  font:
+    600 10px ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+
+.scene-node.firing .node-shape {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+/* a brief pulse, amber where the firing took tokens, accent where it put them */
+@keyframes fsd-consumed {
+  from {
+    stroke: var(--warning);
+    stroke-width: 3.5;
+  }
+}
+
+@keyframes fsd-produced {
+  from {
+    stroke: var(--accent);
+    stroke-width: 3.5;
+  }
+}
+
+.scene-edge.consumed .edge-line {
+  animation: fsd-consumed 0.9s ease-in;
+}
+
+.scene-edge.produced .edge-line {
+  animation: fsd-produced 0.9s ease-in;
+}
+
+.scene-node.waiting .node-shape {
+  stroke: var(--error);
+  stroke-width: 2.5;
+  stroke-dasharray: 4 2;
+}
+
+.scene-edge.short .edge-line,
+.scene-edge.unbounded .edge-line {
+  stroke: var(--error);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+
+.overflow-mark circle {
+  fill: var(--error);
+}
+
+.overflow-mark text {
+  fill: #fff;
+  font:
+    700 12px ui-sans-serif,
+    system-ui,
+    sans-serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* ------------------------------------------------------------------ */
+/* schedule timeline, docked under the diagram                         */
+
+.timeline {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  max-height: 45%;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border);
   background: var(--bg-panel);
+  font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 11px;
-  max-height: 40%;
   overflow: auto;
-  z-index: 4;
 }
 
-.schedule-strip {
+.tl-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.timeline button {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.timeline button:hover,
+.timeline button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tl-play {
+  min-width: 30px;
+}
+
+.tl-speed {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.tl-pos {
+  margin-left: 8px;
   color: var(--fg-dim);
   font-family: ui-monospace, monospace;
-  white-space: nowrap;
+}
+
+.tl-spacer {
+  flex: 1;
+}
+
+.tl-scroll {
   overflow-x: auto;
-  text-align: left;
-  background: none;
-  border: none;
-  font-size: inherit;
-  padding: 0;
-  cursor: pointer;
+}
+
+.tl-row {
+  display: flex;
+  align-items: center;
+  width: max-content;
+}
+
+/* signal names stay put while the cells scroll */
+.tl-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  width: 96px;
+  padding-right: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-dim);
+  background: var(--bg-panel);
+  font-family: ui-monospace, monospace;
+}
+
+.tl-name b {
+  color: var(--buffer-fg);
+}
+
+.tl-cells {
+  display: flex;
+}
+
+.timeline .tl-cell {
+  flex: none;
+  padding: 2px 0;
+  border-radius: 0;
+  border-right-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, monospace;
+}
+
+.timeline .tl-cell:last-child {
+  border-right-width: 1px;
+}
+
+.timeline .tl-cell.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+/* tokens entering or leaving the system, set apart from the actor firings */
+.timeline .tl-cell.input,
+.timeline .tl-cell.output {
+  color: var(--buffer-fg);
+  font-style: italic;
+}
+
+.timeline .tl-cell.input.current,
+.timeline .tl-cell.output.current {
+  background: var(--buffer-fg);
+  border-color: var(--buffer-fg);
+  color: var(--bg);
+}
+
+.toolbar .animate-button {
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.toolbar .animate-button.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.toolbar .animate-button:disabled {
+  color: var(--fg-dim);
+  border-color: var(--border);
+}
+
+.tl-spark {
+  display: block;
+  overflow: visible;
+}
+
+.tl-spark polyline {
+  fill: none;
+  stroke: var(--buffer-fg);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+.tl-max {
+  fill: var(--buffer-fg);
+}
+
+.tl-cursor {
+  stroke: var(--accent);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.sched-detail {
+  margin-top: 2px;
+  opacity: 0.9;
 }
 
 .schedule-chip {
@@ -774,8 +1159,7 @@ body {
   z-index: 4;
 }
 
-.schedule-chip:hover,
-.schedule-strip:hover {
+.schedule-chip:hover {
   color: var(--accent);
 }
 
@@ -819,8 +1203,10 @@ body {
   color: var(--bg);
 }
 
+/* wraps short of the zoom controls in the same corner */
 .sched-banner {
   bottom: 12px;
+  max-width: calc(100% - 64px);
   background: var(--error);
   color: #fff;
 }
@@ -958,7 +1344,7 @@ body {
   }
 }
 
-.react-flow__node.just-added .node-shape {
+.scene-node.just-added .node-shape {
   animation: fsd-pulse 0.6s ease-in-out 3;
 }
 

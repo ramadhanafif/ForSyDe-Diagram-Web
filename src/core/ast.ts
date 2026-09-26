@@ -18,7 +18,7 @@ export function orderDiagnostics(diags: Diagnostic[]): Diagnostic[] {
   );
 }
 
-/** Diagnostic surfaced when ELK layout throws; the last-good model stays on screen. */
+/** Diagnostic surfaced when layout throws; the last-good model stays on screen. */
 export function layoutFailed(err: unknown): Diagnostic {
   const detail = err instanceof Error ? err.message : String(err);
   return {

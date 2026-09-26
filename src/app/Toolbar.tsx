@@ -1,27 +1,43 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import pkg from '../../package.json';
 import { examples } from './examples';
+
+export type ExportKind = 'hs' | 'png' | 'svg' | 'tikz' | 'copy-tikz';
+
+const EXPORTS: [ExportKind, string, string][] = [
+  ['hs', 'Haskell (.hs)', 'Download the source with the node positions, as a .hs file'],
+  ['png', 'PNG image', 'Download the diagram as a PNG image (2x)'],
+  ['svg', 'SVG', 'Download the diagram as a standalone SVG, for Inkscape or the web'],
+  ['tikz', 'TikZ (.tex)', 'Download a standalone LaTeX document drawing the diagram in TikZ'],
+  ['copy-tikz', 'Copy TikZ', 'Copy only the tikzpicture, to paste into your own document'],
+];
 
 export interface ToolbarProps {
   example: string;
   onExample(name: string): void;
-  onNew(): void;
-  onOpen(file: File): void;
-  onExportHs(): void;
   onFit(): void;
-  onTidy(): void;
   showSchedule: boolean;
   onToggleSchedule(): void;
   onAddActor(): void;
   onAddDelay(): void;
-  onExportPng(): void;
+  onExport(kind: ExportKind): void;
+  onNew(): void;
+  onOpen(file: File): void;
+  /** Back to the automatic layout, dropping the dragged node positions. */
+  onTidy(): void;
   onTour(): void;
+  /** The simulation is playing. */
+  animating: boolean;
+  /** There is something to play: a schedule period, or a run that gets stuck. */
+  canAnimate: boolean;
+  onAnimate(): void;
   diagramTheme: 'modern' | 'lecture';
   onToggleDiagramTheme(): void;
   onToggleAppTheme(): void;
 }
 
 export function Toolbar(p: ToolbarProps) {
+  const [exportOpen, setExportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   return (
     <header className="toolbar">
@@ -47,9 +63,6 @@ export function Toolbar(p: ToolbarProps) {
             if (file) p.onOpen(file);
           }}
         />
-        <button title="Download the source with node positions as a .hs file" onClick={p.onExportHs}>
-          Export .hs
-        </button>
         <select
           title="Load example"
           value={p.example}
@@ -70,6 +83,19 @@ export function Toolbar(p: ToolbarProps) {
           Tidy
         </button>
         <button
+          className={`animate-button${p.animating ? ' active' : ''}`}
+          aria-pressed={p.animating}
+          disabled={!p.canAnimate}
+          title={
+            p.canAnimate
+              ? 'Run the model: inputs produce tokens, they travel through the buffers and the actors fire'
+              : 'Nothing to run: fix the errors or connect the model first'
+          }
+          onClick={p.onAnimate}
+        >
+          {p.animating ? '■ Stop' : '▶ Animate'}
+        </button>
+        <button
           className={p.showSchedule ? 'active' : ''}
           title="Show or hide the schedule results: firing order, repetitions and buffer sizes"
           onClick={p.onToggleSchedule}
@@ -85,9 +111,32 @@ export function Toolbar(p: ToolbarProps) {
         >
           Add delay
         </button>
-        <button title="Download the diagram as a PNG image" onClick={p.onExportPng}>
-          Export PNG
-        </button>
+        <details
+          className="export-menu"
+          open={exportOpen}
+          onToggle={(e) => setExportOpen(e.currentTarget.open)}
+        >
+          <summary title="Save the diagram as an image or as LaTeX">Export</summary>
+          {/* only while open: a closed menu must not answer queries for [role=menu] */}
+          {exportOpen && (
+            <div role="menu">
+              {EXPORTS.map(([kind, label, title]) => (
+                <button
+                  key={kind}
+                  role="menuitem"
+                  data-export={kind}
+                  title={title}
+                  onClick={() => {
+                    setExportOpen(false);
+                    p.onExport(kind);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </details>
         <span className="palette" title="Drag onto an edge to insert it there">
           <span
             className="chip"
