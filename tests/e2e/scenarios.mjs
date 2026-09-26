@@ -494,8 +494,8 @@ async function setStyle(page, style) {
   await settle(page);
 }
 
-const DEFAULT_SHOW = Object.fromEntries(FLAG_BUTTONS.map((l) => [l, l !== 'rates equal to 1']));
-const ALL_SHOW = Object.fromEntries(FLAG_BUTTONS.map((l) => [l, true]));
+const DEFAULT_SHOW = Object.fromEntries(FLAG_BUTTONS.map((l) => [l, true]));
+const NO_UNIT_SHOW = { ...DEFAULT_SHOW, 'rates equal to 1': false };
 
 const near = (a, b, tol = 2) => Math.abs(a - b) <= tol;
 
@@ -534,7 +534,7 @@ async function overlap(page, { url }) {
     await setStyle(page, style);
     for (const [flagName, flags] of [
       ['default', DEFAULT_SHOW],
-      ['all', ALL_SHOW],
+      ['no-unit-rates', NO_UNIT_SHOW],
     ]) {
       await setFlags(page, flags);
       for (const name of names) {

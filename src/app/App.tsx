@@ -303,7 +303,7 @@ export function App() {
   const queueRenames = useCallback((pairs: [string, string][]) => {
     if (pairs.length) setRenames((r) => [...r, ...pairs]);
   }, []);
-  const [showUnitRates, setShowUnitRates] = useState(false);
+  const [showUnitRates, setShowUnitRates] = useState(true);
   const [showSchedule, setShowSchedule] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(true);
   const [showFlags, setShowFlags] = useState<ShowFlags>(() =>

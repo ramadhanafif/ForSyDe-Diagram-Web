@@ -143,8 +143,14 @@ export const SceneLabels = memo(function SceneLabels({ model, style, flags }: Pr
         const title = out
           ? `production rate: ${proc} writes ${r} token${plural(r)} onto ${sig} per firing`
           : `consumption rate: ${proc} reads ${r} token${plural(r)} from ${sig} per firing`;
+        // a rate of 1 completes the balance equation but is the default: drawn quietly
         return (
-          <div {...common} data-owner-edge={edge} title={title}>
+          <div
+            {...common}
+            className={r === 1 ? `${common.className} label-unit` : common.className}
+            data-owner-edge={edge}
+            title={title}
+          >
             {l.text}
           </div>
         );

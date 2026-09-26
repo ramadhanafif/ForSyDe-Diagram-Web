@@ -313,6 +313,11 @@ body {
   color: var(--accent);
 }
 
+/* rates equal to 1: shown so each balance equation has both sides, but quiet */
+.label-rate.label-unit {
+  opacity: 0.5;
+}
+
 .label-buffer {
   color: var(--fg-dim);
 }
