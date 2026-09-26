@@ -28,6 +28,11 @@ describe('layout block', () => {
     );
   });
 
+  it('ignores coordinates beyond 1e6, keeps those at it', () => {
+    const src = '-- @layout a 999999999999 0\n-- @layout b 0 -1000001\n-- @layout c -1000000 1000000\n';
+    expect(parseLayoutBlock(src)).toEqual(new Map([['c', { x: -1e6, y: 1e6 }]]));
+  });
+
   it('parses what it writes', () => {
     expect(parseLayoutBlock(writeLayoutBlock(SRC, POS))).toEqual(
       new Map([

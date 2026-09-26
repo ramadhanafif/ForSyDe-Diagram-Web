@@ -19,7 +19,9 @@ const ANY_LAYOUT_RE = /^[ \t]*--[ \t]*@layout(\s|$)/;
 
 const isBlank = (line: string) => line.trim() === '';
 
-/** Later lines win for a repeated id; malformed or non-finite lines are ignored. */
+const MAX_COORD = 1e6;
+
+/** Later lines win for a repeated id; malformed lines and |x| or |y| above 1e6 are ignored. */
 export function parseLayoutBlock(source: string): Map<string, Point> {
   const positions = new Map<string, Point>();
   for (const line of source.split('\n')) {
@@ -27,8 +29,8 @@ export function parseLayoutBlock(source: string): Map<string, Point> {
     if (!m) continue;
     const x = Number(m[2]);
     const y = Number(m[3]);
-    // a few hundred digits overflow to Infinity
-    if (Number.isFinite(x) && Number.isFinite(y)) positions.set(m[1]!, { x, y });
+    // far beyond any diagram: fit-to-view and PNG export would break on it
+    if (Math.abs(x) <= MAX_COORD && Math.abs(y) <= MAX_COORD) positions.set(m[1]!, { x, y });
   }
   return positions;
 }
